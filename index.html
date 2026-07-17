@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smashturbanda - Platform Fighter P2P</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Load PeerJS securely -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Floating Volume Control in top-right corner -->
+        <div id="floating-volume">
+            <button id="btn-volume-toggle" title="Mutear/Desmutear">🔊</button>
+            <div class="volume-slider-container">
+                <input type="range" id="volume-range-floating" min="0" max="1" step="0.05" value="0.7">
+            </div>
+        </div>
+
+        <!-- Main Canvas -->
+        <canvas id="game-canvas"></canvas>
+
+        <!-- Dynamic Game HUD -->
+        <div id="game-hud" class="hidden">
+            <div class="hud-player player-p1">
+                <span class="hud-name" id="p1-hud-name">P1</span>
+                <span class="hud-damage" id="p1-hud-damage">0%</span>
+                <div class="hud-stocks" id="p1-hud-stocks"></div>
+            </div>
+            <div class="hud-player player-p2">
+                <span class="hud-name" id="p2-hud-name">P2</span>
+                <span class="hud-damage" id="p2-hud-damage">0%</span>
+                <div class="hud-stocks" id="p2-hud-stocks"></div>
+            </div>
+        </div>
+
+        <!-- In-game Controls Reference -->
+        <div id="game-controls-overlay" class="hidden" style="position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); font-size: 0.8rem; color: #94a3b8; background: rgba(11, 12, 16, 0.6); backdrop-filter: blur(8px); padding: 8px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); z-index: 5; pointer-events: none; text-align: center; white-space: nowrap;">
+            <span id="game-controls-text"></span>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="toast-msg hidden"></div>
+
+        <!-- OVERLAY: Main Menu -->
+        <div id="menu-main" class="overlay">
+            <div class="menu-card">
+                <h1>Smashturbanda</h1>
+                <p style="color: #94a3b8; margin-bottom: 20px;">Luchador de Plataformas P2P Minimalista</p>
+                <div class="btn-group">
+                    <button class="primary" id="btn-vs-local">Versus Local</button>
+                    <button class="primary" id="btn-vs-cpu">Versus CPU</button>
+                    <button class="primary" id="btn-vs-online">Jugar Online (P2P)</button>
+                    <button id="btn-training">Entrenamiento</button>
+                    <div class="btn-row">
+                        <button id="btn-options-menu">Opciones</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OVERLAY: Character & Stage Selection (CSS) -->
+        <div id="menu-css" class="overlay hidden">
+            <div class="menu-card" style="max-width: 700px;">
+                <h2 id="css-title">Selección de Personaje</h2>
+                
+                <div class="char-grid">
+                    <div class="char-card" data-char="balanceado">
+                        <div class="char-avatar">⚖️</div>
+                        <div class="char-name">Balanceado</div>
+                        <div class="char-class">Estándar</div>
+                    </div>
+                    <div class="char-card" data-char="veloz">
+                        <div class="char-avatar">⚡</div>
+                        <div class="char-name">Veloz</div>
+                        <div class="char-class">Ágil / Ligero</div>
+                    </div>
+                    <div class="char-card" data-char="pesado">
+                        <div class="char-avatar">✊</div>
+                        <div class="char-name">Pesado</div>
+                        <div class="char-class">Lento / Fuerte</div>
+                    </div>
+                    <div class="char-card" data-char="zoner">
+                        <div class="char-avatar">🏹</div>
+                        <div class="char-name">Zoner</div>
+                        <div class="char-class">Distancia</div>
+                    </div>
+                </div>
+
+                <h2 style="margin-top: 20px;">Elige tu Nombre</h2>
+                <div class="name-grid">
+                    <div class="name-card" data-name="Alex">Alex</div>
+                    <div class="name-card" data-name="Martín">Martín</div>
+                    <div class="name-card" data-name="Víctor">Víctor</div>
+                    <div class="name-card" data-name="Gabriel">Gabriel</div>
+                </div>
+
+                <h2>Selección de Escenario</h2>
+                <div class="stage-grid">
+                    <div class="stage-card selected" data-stage="battlefield">
+                        <div>🏟️ Battlefield</div>
+                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 5px;">3 plataformas</div>
+                    </div>
+                    <div class="stage-card" data-stage="destination">
+                        <div>🌌 Destination</div>
+                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 5px;">Sin plataformas</div>
+                    </div>
+                    <div class="stage-card" data-stage="moving">
+                        <div>⚙️ Móvil</div>
+                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 5px;">Plataforma móvil</div>
+                    </div>
+                </div>
+
+                <div style="margin: 15px 0; display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap;">
+                    <label style="font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
+                        Modo de Juego:
+                        <select id="game-mode-select" style="background: #111; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px;">
+                            <option value="stocks">Vidas (Stocks)</option>
+                            <option value="time">Tiempo</option>
+                        </select>
+                    </label>
+                    <label id="stocks-limit-label" style="font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
+                        Vidas:
+                        <select id="game-stocks-select" style="background: #111; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px;">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3" selected>3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </label>
+                    <label id="time-limit-label" style="font-size: 0.9rem; display: none; align-items: center; gap: 8px;">
+                        Minutos:
+                        <select id="game-time-select" style="background: #111; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px;">
+                            <option value="1">1 min</option>
+                            <option value="2" selected>2 min</option>
+                            <option value="3">3 min</option>
+                            <option value="5">5 min</option>
+                            <option value="8">8 min</option>
+                        </select>
+                    </label>
+                    <label id="cpu-diff-label" style="font-size: 0.9rem; display: none; align-items: center; gap: 8px;">
+                        Dificultad CPU:
+                        <select id="cpu-diff-select" style="background: #111; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px;">
+                            <option value="easy">Fácil</option>
+                            <option value="medium" selected>Medio</option>
+                            <option value="hard">Difícil</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="btn-row">
+                    <button class="danger" id="btn-css-back">Atrás</button>
+                    <button class="primary" id="btn-css-start">¡Pelear!</button>
+                </div>
+
+                <!-- Controls Quick Reference -->
+                <div class="controls-quick-ref" style="margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.85rem; color: #94a3b8; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; justify-content: space-around; width: 100%;">
+                        <div>
+                            <strong style="color: #60a5fa;">P1:</strong> <span id="p1-ref-keys">A/D (Mover) | W (Saltar) | S (Plataforma/Rápido) | J (Ataque A) | K (Especial B) | L (Escudo)</span>
+                        </div>
+                        <div id="p2-ref-container">
+                            <strong style="color: #f87171;">P2:</strong> <span id="p2-ref-keys">←/→ (Mover) | ↑ (Saltar) | ↓ (Plataforma/Rápido) | Numpad1 (Ataque A) | Numpad2 (Especial B) | Numpad3 (Escudo)</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 5px; text-align: center;">
+                        * Clic Izquierdo selecciona Personaje P1. Clic Derecho o Shift+Clic selecciona Personaje P2 (o CPU).
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OVERLAY: Multiplayer Lobby -->
+        <div id="menu-lobby" class="overlay hidden">
+            <div class="menu-card">
+                <h2>Lobby Multijugador</h2>
+                <div class="connection-details">
+                    <p>Tu ID: <strong id="my-id">Generando...</strong></p>
+                </div>
+                <div style="margin: 20px 0;">
+                    <input type="text" id="peer-id-input" placeholder="Introduce el ID de tu rival">
+                    <button class="primary" id="btn-connect-peer" style="width: 100%;">Conectar a rival</button>
+                </div>
+                <div class="btn-group">
+                    <button class="danger" id="btn-lobby-back">Atrás</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- OVERLAY: Options / Controls -->
+        <div id="menu-options" class="overlay hidden">
+            <div class="menu-card">
+                <h2>Ajustes y Controles</h2>
+                
+                <div class="volume-control">
+                    <div class="volume-row">
+                        <label for="slider-sfx">Sonidos (SFX):</label>
+                        <input type="range" id="slider-sfx" min="0" max="1" step="0.1" value="0.7">
+                    </div>
+                </div>
+
+                <h3>Controles Jugador 1</h3>
+                <div class="key-map-container" id="p1-controls-list">
+                    <!-- Dynamic control remap rows -->
+                </div>
+
+                <h3>Controles Jugador 2 (Para VS Local)</h3>
+                <div class="key-map-container" id="p2-controls-list">
+                    <!-- Dynamic control remap rows -->
+                </div>
+
+                <div class="btn-row" style="margin-top: 20px;">
+                    <button class="primary" id="btn-options-save">Guardar y Cerrar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- OVERLAY: Game Over / Pause Screen -->
+        <div id="menu-pause" class="overlay hidden">
+            <div class="menu-card">
+                <h1 id="pause-title">PAUSA</h1>
+                <p id="pause-winner" style="font-size: 1.2rem; color: #10b981; margin-bottom: 20px; font-weight: bold;"></p>
+                <div class="btn-group">
+                    <button class="primary" id="btn-pause-resume">Reanudar</button>
+                    <button class="danger" id="btn-pause-exit">Salir al Menú Principal</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="game.js"></script>
+    <script src="multiplayer.js"></script>
+</body>
+</html>
