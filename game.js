@@ -29,15 +29,15 @@ function playSynthSound(type) {
     if (audioCtx.state === 'suspended') {
         audioCtx.resume();
     }
-    
+
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    
+
     const now = audioCtx.currentTime;
     gain.gain.setValueAtTime(sfxVolume * 0.4, now);
-    
+
     if (type === 'jump') {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(150, now);
@@ -246,22 +246,30 @@ const CHARACTERS = {
         doubleJumpForce: 11.0,
         specials: {
             neutral: (p) => { // Arrow Shoot
-                shootProjectile(p, 'arrow', p.facing * 14, 0, 10, 8);
-            },
-            up: (p) => { // Teleport / Hover
-                p.vy = -7;
-                p.vx = p.facing * 6;
-                // Hover effect
-                let count = 0;
-                const interval = setInterval(() => {
-                    if (gameEngine && gameEngine.running && count < 6) {
-                        p.vy = -2;
-                        count++;
+                const keys = p.lastControlState || {};
+                let vx = p.facing * 14;
+                let vy = 0;
+                if (keys.up) {
+                    if (keys.left || keys.right) {
+                        vx = p.facing * 14 * 0.7;
+                        vy = -14 * 0.7;
                     } else {
-                        clearInterval(interval);
+                        vx = 0;
+                        vy = -14;
                     }
-                }, 50);
-                playSynthSound('shield');
+                } else if (keys.down) {
+                    if (keys.left || keys.right) {
+                        vx = p.facing * 14 * 0.7;
+                        vy = 14 * 0.7;
+                    } else {
+                        vx = 0;
+                        vy = 14;
+                    }
+                }
+                shootProjectile(p, 'arrow', vx, vy, 10, 8);
+            },
+            up: (p) => {
+                p.charData.specials.neutral(p);
             }
         }
     }
@@ -271,39 +279,39 @@ const CHARACTERS = {
 const STAGES = {
     battlefield: {
         platforms: [
-            { x: 200, y: 550, w: 800, h: 40, semi: false }, // Main platform (widened from 600 to 800)
-            { x: 280, y: 400, w: 220, h: 12, semi: true },  // Left platform (widened from 160 to 220)
-            { x: 700, y: 400, w: 220, h: 12, semi: true },  // Right platform (widened from 160 to 220)
-            { x: 450, y: 280, w: 300, h: 12, semi: true }   // Top platform (widened from 200 to 300)
+            { x: 100, y: 550, w: 1000, h: 40, semi: false }, // Main platform (widened from 800 to 1000)
+            { x: 180, y: 400, w: 250, h: 12, semi: true },  // Left platform (widened from 220 to 250)
+            { x: 770, y: 400, w: 250, h: 12, semi: true },  // Right platform (widened from 220 to 250)
+            { x: 450, y: 280, w: 300, h: 12, semi: true }   // Top platform
         ],
         spawn: [
-            { x: 300, y: 480 },
-            { x: 480, y: 480 },
-            { x: 720, y: 480 },
-            { x: 900, y: 480 }
+            { x: 200, y: 480 },
+            { x: 450, y: 480 },
+            { x: 750, y: 480 },
+            { x: 1000, y: 480 }
         ]
     },
     destination: {
         platforms: [
-            { x: 150, y: 550, w: 900, h: 40, semi: false }  // Main flat platform (widened from 700 to 900)
+            { x: 70, y: 550, w: 1060, h: 40, semi: false }  // Main flat platform (widened from 900 to 1060)
         ],
         spawn: [
-            { x: 250, y: 480 },
+            { x: 150, y: 480 },
             { x: 450, y: 480 },
             { x: 750, y: 480 },
-            { x: 950, y: 480 }
+            { x: 1050, y: 480 }
         ]
     },
     moving: {
         platforms: [
-            { x: 225, y: 550, w: 750, h: 40, semi: false }, // Main platform (widened from 500 to 750)
-            { x: 425, y: 350, w: 350, h: 12, semi: true, moving: true, rangeY: [200, 420], dirY: 1, speedY: 1.5 } // Moving platform (widened from 200 to 350)
+            { x: 125, y: 550, w: 950, h: 40, semi: false }, // Main platform (widened from 750 to 950)
+            { x: 425, y: 350, w: 350, h: 12, semi: true, moving: true, rangeY: [200, 420], dirY: 1, speedY: 1.5 } // Moving platform
         ],
         spawn: [
-            { x: 300, y: 480 },
+            { x: 220, y: 480 },
             { x: 480, y: 480 },
             { x: 720, y: 480 },
-            { x: 900, y: 480 }
+            { x: 980, y: 480 }
         ]
     }
 };
@@ -327,9 +335,9 @@ window.addEventListener('keyup', (e) => {
 // Helper functions for hit detection
 function checkAABBCollision(rect1, rect2) {
     return rect1.x < rect2.x + rect2.w &&
-           rect1.x + rect1.w > rect2.x &&
-           rect1.y < rect2.y + rect2.h &&
-           rect1.y + rect1.h > rect2.y;
+        rect1.x + rect1.w > rect2.x &&
+        rect1.y < rect2.y + rect2.h &&
+        rect1.y + rect1.h > rect2.y;
 }
 
 function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offsetY) {
@@ -341,7 +349,7 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
         // Starts inside the attacker's body and extends left
         hitboxX = attacker.x + attacker.w / 2 - w - offsetX + w / 3;
     }
-    
+
     const hitbox = {
         x: hitboxX,
         y: attacker.y + offsetY,
@@ -351,11 +359,11 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
         knockback: baseKnockback,
         attackerId: attacker.id
     };
-    
+
     // Find potential targets (all other players)
     gameEngine.players.forEach(opponent => {
         if (opponent.id === attacker.id || opponent.respawning || opponent.invulnerable > 0) return;
-        
+
         const opponentRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
         if (checkAABBCollision(hitbox, opponentRect)) {
             applyHit(attacker, opponent, damage, baseKnockback);
@@ -363,13 +371,13 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
     });
 }
 
-function shootProjectile(attacker, type, vx, vy, damage, baseKnockback) {
+function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW, customH) {
     playSynthSound('shoot');
     const proj = {
         x: attacker.x + (attacker.facing === 1 ? attacker.w + 10 : -20),
         y: attacker.y + attacker.h / 3,
-        w: type === 'fireball' ? 18 : 24,
-        h: type === 'fireball' ? 18 : 6,
+        w: customW || (type === 'fireball' ? 18 : 24),
+        h: customH || (type === 'fireball' ? 18 : 6),
         vx: vx,
         vy: vy,
         type: type,
@@ -393,22 +401,24 @@ function applyHit(attacker, victim, damage, knockback) {
         }
         return;
     }
-    
+
     playSynthSound(knockback > 10 ? 'heavy_hit' : 'hit');
-    victim.damage += damage;
-    
-    // Calculate knockback scaling
-    const scale = (victim.damage / 100) * 1.2 + 0.8;
-    const kbForce = knockback * scale;
-    
+    const scaledDamage = damage * 0.65;
+    victim.damage += scaledDamage;
+
+    // Calculate knockback scaling (gentler progression)
+    const scale = (victim.damage / 100) * 0.75 + 0.65;
+    // Factor in player weight (Pesado takes less, Veloz takes more)
+    const kbForce = (knockback * scale) * (100 / victim.charData.weight);
+
     // Knockback angle
     const angle = attacker.x < victim.x ? -Math.PI / 6 : -5 * Math.PI / 6;
     victim.vx = Math.cos(angle) * kbForce * 0.9;
     victim.vy = Math.sin(angle) * kbForce * 0.8;
-    
+
     // Hitstun duration
     victim.hitStun = Math.max(10, Math.floor(kbForce * 2.0));
-    
+
     // Reset double jump so victim can try to recover
     victim.jumpsUsed = 1;
 }
@@ -438,31 +448,31 @@ class SmashGame {
         this.projectiles = [];
         this.particles = [];
         this.platforms = [];
-        
+
         this.running = false;
         this.mode = 'vs_local'; // 'vs_local', 'vs_cpu', 'vs_online', 'training'
         this.matchType = 'stocks'; // 'stocks', 'time'
         this.stocksLimit = 3;
         this.timeRemaining = 120 * 60; // 2 minutes in frames
-        
+
         this.gameWinner = null;
         this.scale = 1;
         this.p1CharSelected = 'balanceado';
         this.p2CharSelected = 'veloz';
-        
+
         this.resize();
         window.addEventListener('resize', () => this.resize());
     }
-    
+
     resize() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
-        
+
         const scaleX = this.canvas.width / V_WIDTH;
         const scaleY = this.canvas.height / V_HEIGHT;
         this.scale = Math.min(scaleX, scaleY);
     }
-    
+
     setupMatch(mode, playersConfig, stageKey, matchType, stocksLimit = 3, timeLimitMinutes = 2, difficulty = 'medium') {
         this.mode = mode;
         this.matchType = matchType;
@@ -470,13 +480,13 @@ class SmashGame {
         activeStage = stageKey;
         cpuDifficulty = difficulty;
         this.gameWinner = null;
-        
+
         this.timeRemaining = timeLimitMinutes * 60 * 60; // time in frames (60fps * 60secs * minutes)
-        
+
         // Load Stage Platforms
         const stageConfig = STAGES[stageKey];
         this.platforms = JSON.parse(JSON.stringify(stageConfig.platforms));
-        
+
         // Spawn players dynamically
         this.players = playersConfig.map((pConfig, idx) => {
             const char = CHARACTERS[pConfig.char];
@@ -509,22 +519,22 @@ class SmashGame {
                 onGroundSlam: false
             };
         });
-        
+
         this.projectiles = [];
         this.particles = [];
-        
+
         // Show/Hide overlays
         document.getElementById('menu-main').classList.add('hidden');
         document.getElementById('menu-css').classList.add('hidden');
         document.getElementById('menu-lobby').classList.add('hidden');
         document.getElementById('menu-options').classList.add('hidden');
         document.getElementById('menu-pause').classList.add('hidden');
-        
+
         const toast = document.getElementById('toast');
         if (toast) toast.classList.add('hidden');
-        
+
         document.getElementById('game-hud').classList.remove('hidden');
-        
+
         // Update controls overlay text
         const ctrlOverlay = document.getElementById('game-controls-overlay');
         const ctrlText = document.getElementById('game-controls-text');
@@ -541,82 +551,148 @@ class SmashGame {
         }
 
         this.updateHUD();
-        
+
+        const timerEl = document.getElementById('game-timer');
+        if (timerEl) {
+            if (this.matchType === 'time' && this.mode !== 'training') {
+                timerEl.classList.remove('hidden');
+            } else {
+                timerEl.classList.add('hidden');
+            }
+        }
+
         // Trigger loops
         this.startLoops();
     }
-    
+
     startLoops() {
         this.running = true;
-        
+
         if (this.updateInterval) clearInterval(this.updateInterval);
-        
+
         this.updateInterval = setInterval(() => {
             if (this.running) {
                 this.update();
             }
         }, 1000 / 60);
-        
+
         this.loop();
     }
-    
+
     updateHUD() {
         const hudContainer = document.getElementById('game-hud');
         if (!hudContainer) return;
-        hudContainer.replaceChildren();
-        
+
         const colors = ['#60a5fa', '#f87171', '#fbbf24', '#34d399'];
-        
+
+        // Reconstruct only if player count changes or differs
+        if (hudContainer.children.length !== this.players.length) {
+            hudContainer.replaceChildren();
+            this.players.forEach((p, idx) => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = `hud-player player-p${idx + 1}`;
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'hud-name';
+                nameSpan.textContent = p.name;
+                nameSpan.style.color = colors[idx % colors.length];
+                playerDiv.appendChild(nameSpan);
+
+                const damageSpan = document.createElement('span');
+                damageSpan.className = 'hud-damage';
+                damageSpan.textContent = `${Math.floor(p.damage)}%`;
+                damageSpan.style.color = '#ffffff';
+                playerDiv.appendChild(damageSpan);
+
+                const stocksDiv = document.createElement('div');
+                stocksDiv.className = 'hud-stocks';
+                playerDiv.appendChild(stocksDiv);
+
+                hudContainer.appendChild(playerDiv);
+            });
+        }
+
+        // Update existing elements in place
         this.players.forEach((p, idx) => {
-            const playerDiv = document.createElement('div');
-            playerDiv.className = `hud-player player-p${idx + 1}`;
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'hud-name';
-            nameSpan.textContent = p.name;
-            nameSpan.style.color = colors[idx % colors.length];
-            playerDiv.appendChild(nameSpan);
-            
-            const damageSpan = document.createElement('span');
-            damageSpan.className = 'hud-damage';
-            damageSpan.textContent = `${Math.floor(p.damage)}%`;
-            damageSpan.style.color = p.damage > 100 ? '#ef4444' : p.damage > 50 ? '#fbbf24' : '#ffffff';
-            playerDiv.appendChild(damageSpan);
-            
-            const stocksDiv = document.createElement('div');
-            stocksDiv.className = 'hud-stocks';
-            if (this.matchType === 'stocks') {
-                for (let i = 0; i < this.stocksLimit; i++) {
-                    const dot = document.createElement('div');
-                    dot.className = `stock-dot ${i >= p.stocks ? 'lost' : ''}`;
-                    stocksDiv.appendChild(dot);
+            const playerDiv = hudContainer.children[idx];
+            if (!playerDiv) return;
+
+            const damageSpan = playerDiv.querySelector('.hud-damage');
+            if (damageSpan) {
+                const targetDamageText = `${Math.floor(p.damage)}%`;
+                if (damageSpan.textContent !== targetDamageText) {
+                    damageSpan.textContent = targetDamageText;
+                    damageSpan.style.color = p.damage > 100 ? '#ef4444' : p.damage > 50 ? '#fbbf24' : '#ffffff';
                 }
-            } else {
-                stocksDiv.textContent = `Score: ${p.score}`;
             }
-            playerDiv.appendChild(stocksDiv);
-            
-            hudContainer.appendChild(playerDiv);
+
+            const nameSpan = playerDiv.querySelector('.hud-name');
+            if (nameSpan && nameSpan.textContent !== p.name) {
+                nameSpan.textContent = p.name;
+            }
+
+            const stocksDiv = playerDiv.querySelector('.hud-stocks');
+            if (stocksDiv) {
+                if (this.matchType === 'stocks') {
+                    const dots = stocksDiv.children;
+                    if (dots.length !== this.stocksLimit) {
+                        stocksDiv.replaceChildren();
+                        for (let i = 0; i < this.stocksLimit; i++) {
+                            const dot = document.createElement('div');
+                            dot.className = `stock-dot ${i >= p.stocks ? 'lost' : ''}`;
+                            stocksDiv.appendChild(dot);
+                        }
+                    } else {
+                        for (let i = 0; i < this.stocksLimit; i++) {
+                            const isLost = i >= p.stocks;
+                            if (isLost) {
+                                if (!dots[i].classList.contains('lost')) {
+                                    dots[i].classList.add('lost');
+                                }
+                            } else {
+                                if (dots[i].classList.contains('lost')) {
+                                    dots[i].classList.remove('lost');
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    const targetScoreText = `Score: ${p.score}`;
+                    if (stocksDiv.textContent !== targetScoreText) {
+                        stocksDiv.textContent = targetScoreText;
+                    }
+                }
+            }
         });
     }
-    
+
     loop() {
         if (!this.running) return;
-        
+
         this.render();
-        
+
         requestAnimationFrame(() => this.loop());
     }
-    
+
     update() {
         // Mode Time countdown
         if (this.matchType === 'time' && this.mode !== 'training') {
             this.timeRemaining--;
+
+            const totalSeconds = Math.max(0, Math.ceil(this.timeRemaining / 60));
+            const mins = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            const formattedTime = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            const timerEl = document.getElementById('game-timer');
+            if (timerEl && timerEl.textContent !== formattedTime) {
+                timerEl.textContent = formattedTime;
+            }
+
             if (this.timeRemaining <= 0) {
                 this.endMatch();
             }
         }
-        
+
         // Update platforms
         this.platforms.forEach(p => {
             if (p.moving) {
@@ -628,22 +704,22 @@ class SmashGame {
                 }
             }
         });
-        
+
         // Update Players
         this.players.forEach(p => {
             this.updatePlayer(p);
         });
-        
+
         // Update Projectiles
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const pr = this.projectiles[i];
             pr.x += pr.vx;
             pr.y += pr.vy;
             pr.life--;
-            
+
             // Check collision with stage/screen bounds or oponent
             let active = pr.life > 0 && pr.x > 0 && pr.x < V_WIDTH && pr.y > 0 && pr.y < V_HEIGHT;
-            
+
             if (active) {
                 // Collide with any opponent
                 for (let pl of this.players) {
@@ -657,12 +733,12 @@ class SmashGame {
                     }
                 }
             }
-            
+
             if (!active) {
                 this.projectiles.splice(i, 1);
             }
         }
-        
+
         // Update Particles
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const part = this.particles[i];
@@ -674,8 +750,11 @@ class SmashGame {
                 this.particles.splice(i, 1);
             }
         }
+
+        // Update HUD in real-time
+        this.updateHUD();
     }
-    
+
     updatePlayer(p) {
         if (p.respawning) {
             p.respawnTimer--;
@@ -692,12 +771,58 @@ class SmashGame {
             }
             return;
         }
-        
+
         // Decr hit stun & shield stun
         if (p.hitStun > 0) p.hitStun--;
         if (p.shieldStun > 0) p.shieldStun--;
         if (p.invulnerable > 0) p.invulnerable--;
-        
+
+        if (p.balanceadoCooldown === undefined) p.balanceadoCooldown = 0;
+        if (p.balanceadoCharge === undefined) p.balanceadoCharge = 0;
+        if (p.zonerShots === undefined) p.zonerShots = 2;
+        if (p.zonerRechargeTimer === undefined) p.zonerRechargeTimer = 0;
+
+        if (p.velozCharge === undefined) p.velozCharge = 0;
+        if (p.velozDashTimer === undefined) p.velozDashTimer = 0;
+        if (p.velozDashSpeed === undefined) p.velozDashSpeed = 0;
+        if (p.velozDashHits === undefined) p.velozDashHits = [];
+
+        if (p.balanceadoCooldown > 0) p.balanceadoCooldown--;
+        if (p.zonerRechargeTimer > 0) {
+            p.zonerRechargeTimer--;
+            if (p.zonerRechargeTimer === 0) {
+                p.zonerShots = 2;
+            }
+        }
+
+        if (p.upSpecialUsed === undefined) p.upSpecialUsed = false;
+        if (p.velozDashUsed === undefined) p.velozDashUsed = false;
+        if (p.isGrounded) {
+            p.upSpecialUsed = false;
+            p.velozDashUsed = false;
+        }
+
+        if (p.velozDashTimer > 0) {
+            p.velozDashTimer--;
+            p.vx = (p.velozDashDirX !== undefined ? p.velozDashDirX : p.facing) * p.velozDashSpeed;
+            p.vy = (p.velozDashDirY !== undefined ? p.velozDashDirY : 0) * p.velozDashSpeed;
+
+            // Check collision with other players during dash
+            this.players.forEach(opponent => {
+                if (opponent.id !== p.id && !opponent.respawning && opponent.invulnerable <= 0) {
+                    const playerRect = { x: p.x, y: p.y, w: p.w, h: p.h };
+                    const oppRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
+                    if (checkAABBCollision(playerRect, oppRect) && !p.velozDashHits.includes(opponent.id)) {
+                        const progress = (p.velozDashSpeed - 12) / 12; // 0 to 1
+                        const damage = Math.round(8 + progress * 8); // 8 to 16 damage
+                        const knockback = Math.round(8 + progress * 6); // 8 to 14 knockback
+                        applyHit(p, opponent, damage, knockback);
+                        p.velozDashHits.push(opponent.id);
+                    }
+                }
+            });
+        }
+
         // Shield recovery
         if (!p.shieldActive && p.shieldStrength < 100 && p.shieldStun <= 0) {
             p.shieldStrength = Math.min(100, p.shieldStrength + 0.2);
@@ -709,7 +834,7 @@ class SmashGame {
                 playSynthSound('shield_break');
             }
         }
-        
+
         // Get Inputs
         const prevKeys = p.prevControlState || {};
         let keys = {};
@@ -734,7 +859,7 @@ class SmashGame {
                 keys = this.getCPUInputs(p);
             }
         }
-        
+
         // Physics / Movement
         if (p.hitStun <= 0 && p.shieldStun <= 0) {
             // Shield toggle
@@ -744,7 +869,7 @@ class SmashGame {
             } else {
                 p.shieldActive = false;
             }
-            
+
             if (!p.shieldActive) {
                 // Horizontal Move
                 if (keys.left) {
@@ -757,7 +882,7 @@ class SmashGame {
                     // Friction
                     p.vx *= p.isGrounded ? 0.75 : 0.95;
                 }
-                
+
                 // Jump / Double Jump
                 if (keys.jump && !prevKeys.jump) {
                     if (p.isGrounded) {
@@ -771,12 +896,12 @@ class SmashGame {
                         playSynthSound('jump');
                     }
                 }
-                
+
                 // Fast Fall
                 if (keys.down && !p.isGrounded && p.vy > 0) {
                     p.vy = Math.min(18, p.vy + 2.5);
                 }
-                
+
                 // Attacks
                 if (keys.attackA && !prevKeys.attackA) {
                     // Attack standard
@@ -792,12 +917,152 @@ class SmashGame {
                     } else {
                         triggerMeleeHitbox(p, 45, 30, 6, 6, 10, -5);  // Neutral Jab
                     }
-                } else if (keys.attackB && !prevKeys.attackB) {
-                    // Attack Special
-                    if (keys.up) {
-                        p.charData.specials.up(p);
+                } else if (keys.attackB && keys.up && !prevKeys.attackB) {
+                    // Up Special (One-shot per airtime)
+                    if (!p.isGrounded && p.upSpecialUsed) {
+                        // Already used in the air, do nothing
                     } else {
-                        p.charData.specials.neutral(p);
+                        p.charData.specials.up(p);
+                        if (!p.isGrounded) {
+                            p.upSpecialUsed = true;
+                        }
+                    }
+                } else {
+                    // Neutral Special (or charging / zoner cooldown handling)
+                    if (p.charData.name === "Balanceado") {
+                        if (p.balanceadoCooldown <= 0) {
+                            if (keys.attackB && !keys.up) {
+                                p.balanceadoCharge++;
+                                p.vx = 0; // Stall horizontal movement
+                                if (p.vy > 0) p.vy = 0.5; // Slow fall during charging
+
+                                if (p.balanceadoCharge >= 60) {
+                                    // Auto fire at max charge (1 second)
+                                    const progress = 1;
+                                    const damage = Math.round(15 + progress * 15);
+                                    const knockback = Math.round(6 + progress * 6);
+                                    const baseSpeed = 10 + progress * 3;
+                                    const size = Math.round(18 + progress * 18);
+
+                                    let vx = p.facing * baseSpeed;
+                                    let vy = 0;
+                                    if (keys.up) {
+                                        if (keys.left || keys.right) {
+                                            vx = p.facing * baseSpeed * 0.7;
+                                            vy = -baseSpeed * 0.7;
+                                        } else {
+                                            vx = 0;
+                                            vy = -baseSpeed;
+                                        }
+                                    } else if (keys.down) {
+                                        if (keys.left || keys.right) {
+                                            vx = p.facing * baseSpeed * 0.7;
+                                            vy = baseSpeed * 0.7;
+                                        } else {
+                                            vx = 0;
+                                            vy = baseSpeed;
+                                        }
+                                    }
+                                    shootProjectile(p, 'fireball', vx, vy, damage, knockback, size, size);
+
+                                    p.balanceadoCooldown = 40; // 0.67s cooldown
+                                    p.balanceadoCharge = 0;
+                                }
+                            } else if (p.balanceadoCharge > 0) {
+                                // Released attackB
+                                const progress = Math.min(1, p.balanceadoCharge / 60);
+                                const damage = Math.round(15 + progress * 15);
+                                const knockback = Math.round(6 + progress * 6);
+                                const baseSpeed = 10 + progress * 3;
+                                const size = Math.round(18 + progress * 18);
+
+                                let vx = p.facing * baseSpeed;
+                                let vy = 0;
+                                if (keys.up) {
+                                    if (keys.left || keys.right) {
+                                        vx = p.facing * baseSpeed * 0.7;
+                                        vy = -baseSpeed * 0.7;
+                                    } else {
+                                        vx = 0;
+                                        vy = -baseSpeed;
+                                    }
+                                } else if (keys.down) {
+                                    if (keys.left || keys.right) {
+                                        vx = p.facing * baseSpeed * 0.7;
+                                        vy = baseSpeed * 0.7;
+                                    } else {
+                                        vx = 0;
+                                        vy = baseSpeed;
+                                    }
+                                }
+                                shootProjectile(p, 'fireball', vx, vy, damage, knockback, size, size);
+
+                                p.balanceadoCooldown = 40;
+                                p.balanceadoCharge = 0;
+                            }
+                        }
+                    } else if (p.charData.name === "Zoner") {
+                        if (keys.attackB && !prevKeys.attackB && !keys.up) {
+                            if (p.zonerShots > 0) {
+                                p.charData.specials.neutral(p);
+                                p.zonerShots--;
+                                p.zonerRechargeTimer = 40; // Reset recharge timer to 0.67s
+                            }
+                        }
+                    } else if (p.charData.name === "Veloz") {
+                        if (p.velozDashTimer === 0 && (!p.isGrounded ? !p.velozDashUsed : true)) {
+                            if (keys.attackB && !keys.up) {
+                                p.velozCharge++;
+                                p.vx = 0;
+                                if (p.vy > 0) p.vy = 0.5; // slow fall during charge
+
+                                if (p.velozCharge >= 45) {
+                                    const progress = 1;
+                                    p.velozDashSpeed = 12 + progress * 12;
+                                    p.velozDashTimer = Math.round(8 + progress * 8);
+                                    p.shieldStun = p.velozDashTimer;
+                                    p.velozDashHits = [];
+                                    p.velozCharge = 0;
+
+                                    // 8-directional aiming
+                                    let dirX = 0, dirY = 0;
+                                    if (keys.up) dirY = -1;
+                                    else if (keys.down) dirY = 1;
+                                    if (keys.left || keys.right) dirX = p.facing;
+                                    if (dirX === 0 && dirY === 0) dirX = p.facing;
+                                    const len = Math.sqrt(dirX * dirX + dirY * dirY);
+                                    p.velozDashDirX = dirX / len;
+                                    p.velozDashDirY = dirY / len;
+
+                                    if (!p.isGrounded) p.velozDashUsed = true;
+                                    playSynthSound('jump');
+                                }
+                            } else if (p.velozCharge > 0) {
+                                const progress = Math.min(1, p.velozCharge / 45);
+                                p.velozDashSpeed = 12 + progress * 12;
+                                p.velozDashTimer = Math.round(8 + progress * 8);
+                                p.shieldStun = p.velozDashTimer;
+                                p.velozDashHits = [];
+                                p.velozCharge = 0;
+
+                                // 8-directional aiming
+                                let dirX = 0, dirY = 0;
+                                if (keys.up) dirY = -1;
+                                else if (keys.down) dirY = 1;
+                                if (keys.left || keys.right) dirX = p.facing;
+                                if (dirX === 0 && dirY === 0) dirX = p.facing;
+                                const len = Math.sqrt(dirX * dirX + dirY * dirY);
+                                p.velozDashDirX = dirX / len;
+                                p.velozDashDirY = dirY / len;
+
+                                if (!p.isGrounded) p.velozDashUsed = true;
+                                playSynthSound('jump');
+                            }
+                        }
+                    } else {
+                        if (keys.attackB && !prevKeys.attackB && !keys.up) {
+                            p.charData.specials.neutral(p);
+                        }
                     }
                 }
             }
@@ -806,19 +1071,19 @@ class SmashGame {
             if (keys.left) p.vx -= 0.05;
             if (keys.right) p.vx += 0.05;
         }
-        
+
         p.lastControlState = keys;
         p.prevControlState = Object.assign({}, keys);
-        
+
         // Apply Gravity
         if (!p.isGrounded) {
             p.vy = Math.min(20, p.vy + 0.5); // gravity terminal velocity 20
         }
-        
+
         // Move coordinates
         p.x += p.vx;
         p.y += p.vy;
-        
+
         // Ground slam hit (Pesado custom logic)
         if (p.onGroundSlam) {
             if (p.isGrounded || p.vy === 0) {
@@ -827,23 +1092,23 @@ class SmashGame {
                 playSynthSound('heavy_hit');
             }
         }
-        
+
         // Platforms Collisions
         p.isGrounded = false;
-        
+
         for (let plat of this.platforms) {
             // Fall through semi-platform
             if (plat.semi && keys.down && p.vy >= 0 && (p.y + p.h - p.vy <= plat.y + 2)) {
                 continue;
             }
-            
+
             // Solid collision from top
             if (p.vy >= 0 &&
                 p.x + p.w * 0.2 < plat.x + plat.w &&
                 p.x + p.w * 0.8 > plat.x &&
                 p.y + p.h - p.vy <= plat.y + 8 &&
                 p.y + p.h >= plat.y) {
-                
+
                 p.y = plat.y - p.h;
                 p.vy = 0;
                 p.isGrounded = true;
@@ -851,17 +1116,18 @@ class SmashGame {
                 break;
             }
         }
-        
+
         // Blast Zone Boundaries (Elimination Check)
         if (p.x < -100 || p.x > V_WIDTH + 100 || p.y < -150 || p.y > V_HEIGHT + 100) {
             this.handlePlayerOut(p);
         }
     }
-    
+
     handlePlayerOut(p) {
         createBlastParticles(Math.min(V_WIDTH, Math.max(0, p.x)), Math.min(V_HEIGHT, Math.max(0, p.y)), p.charData.color);
         playSynthSound('death');
-        
+        p.damage = 0; // Reset damage immediately upon death
+
         if (this.mode === 'training') {
             // Training mode: infinite respawn, no stocks/points
             p.respawning = true;
@@ -869,10 +1135,10 @@ class SmashGame {
             this.updateHUD();
             return;
         }
-        
+
         const killer = this.players.find(pl => pl.id !== p.id);
         if (killer) killer.score++;
-        
+
         if (this.matchType === 'stocks') {
             p.stocks--;
             this.updateHUD();
@@ -883,11 +1149,11 @@ class SmashGame {
         } else {
             this.updateHUD();
         }
-        
+
         p.respawning = true;
         p.respawnTimer = 60;
     }
-    
+
     getPlayerInputs(pId) {
         const layout = controls[pId] || controls.p1;
         return {
@@ -902,15 +1168,15 @@ class SmashGame {
             grab: keysPressed[layout.grab] || false
         };
     }
-    
+
     getCPUInputs(cpu) {
         const target = this.players[0]; // Player 1
         const inputs = { left: false, right: false, up: false, down: false, jump: false, attackA: false, attackB: false, shield: false };
         if (cpu.respawning || target.respawning) return inputs;
-        
+
         const dist = target.x - cpu.x;
         const distY = target.y - cpu.y;
-        
+
         // Recovery logic (if off stage)
         const isOffStage = cpu.x < 300 || cpu.x > 900;
         if (isOffStage && cpu.y > 550) {
@@ -925,13 +1191,13 @@ class SmashGame {
             else inputs.left = true;
             return inputs;
         }
-        
+
         // CPU difficulty reaction times / thresholds
         const decisionRoll = Math.random();
         let attackChance = 0.05;
         let followChance = 0.6;
         let shieldChance = 0.01;
-        
+
         if (cpuDifficulty === 'easy') {
             followChance = 0.3;
             attackChance = 0.02;
@@ -941,16 +1207,16 @@ class SmashGame {
             attackChance = 0.12;
             shieldChance = 0.03;
         }
-        
+
         if (decisionRoll < followChance) {
             if (dist > 30) inputs.right = true;
             else if (dist < -30) inputs.left = true;
-            
+
             if (distY < -80 && Math.abs(dist) < 100) {
                 inputs.jump = Math.random() < 0.1;
             }
         }
-        
+
         // Attack decision
         if (Math.abs(dist) < 80 && Math.abs(distY) < 50 && Math.random() < attackChance) {
             // Check if special B or standard A
@@ -965,60 +1231,81 @@ class SmashGame {
                 }
             }
         }
-        
+
         // Shield decision
         if (Math.abs(dist) < 90 && target.shieldStun > 0 && Math.random() < shieldChance) {
             inputs.shield = true;
         }
-        
+
         return inputs;
     }
-    
+
     endMatch() {
         this.running = false;
         if (this.updateInterval) {
             clearInterval(this.updateInterval);
             this.updateInterval = null;
         }
-        
+
         const ctrlOverlay = document.getElementById('game-controls-overlay');
         if (ctrlOverlay) ctrlOverlay.classList.add('hidden');
 
-        let winner = "Jugador 1";
-        
+        let winner = this.players[0] ? this.players[0].name : "Jugador 1";
+
         if (this.matchType === 'stocks') {
-            if (this.players[0].stocks <= 0) {
-                winner = this.players[1].name;
-            }
-        } else {
-            if (this.players[1].score > this.players[0].score) {
-                winner = this.players[1].name;
-            } else if (this.players[1].score === this.players[0].score) {
+            const alivePlayers = this.players.filter(p => p.stocks > 0);
+            if (alivePlayers.length === 1) {
+                winner = alivePlayers[0].name;
+            } else if (alivePlayers.length > 1) {
+                const sorted = [...alivePlayers].sort((a, b) => b.stocks - a.stocks || b.score - a.score);
+                winner = sorted[0].name;
+            } else {
                 winner = "Empate";
             }
+        } else {
+            const sorted = [...this.players].sort((a, b) => b.score - a.score);
+            if (sorted.length > 1 && sorted[0].score === sorted[1].score) {
+                winner = "Empate";
+            } else if (sorted.length > 0) {
+                winner = sorted[0].name;
+            }
         }
-        
+
         this.gameWinner = winner;
         document.getElementById('game-hud').classList.add('hidden');
-        
+        const timerEl = document.getElementById('game-timer');
+        if (timerEl) timerEl.classList.add('hidden');
+
         const pauseWinnerEl = document.getElementById('pause-winner');
         pauseWinnerEl.textContent = winner === "Empate" ? "¡EMPATE!" : `¡GANADOR: ${winner}!`;
         document.getElementById('pause-title').textContent = "FIN DE LA PARTIDA";
         document.getElementById('btn-pause-resume').classList.add('hidden');
-        
+
+        const pauseLobbyBtn = document.getElementById('btn-pause-lobby');
+        if (pauseLobbyBtn) {
+            pauseLobbyBtn.classList.remove('hidden');
+        }
+
         document.getElementById('menu-pause').classList.remove('hidden');
+
+        if (this.mode === 'vs_online' && typeof broadcast === 'function') {
+            broadcast({
+                type: 'match_end',
+                winner: winner
+            });
+        }
     }
-    
+
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
+
         this.ctx.save();
         // Centering and aspect ratio scaling
         const offsetLeft = (this.canvas.width - V_WIDTH * this.scale) / 2;
         const offsetTop = (this.canvas.height - V_HEIGHT * this.scale) / 2;
         this.ctx.translate(offsetLeft, offsetTop);
         this.ctx.scale(this.scale, this.scale);
-        
+
         // Render background grid/gradient highlights
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
         for (let i = 0; i < V_WIDTH; i += 100) {
@@ -1027,7 +1314,7 @@ class SmashGame {
         for (let j = 0; j < V_HEIGHT; j += 100) {
             this.ctx.fillRect(0, j, V_WIDTH, 1);
         }
-        
+
         // Draw Stages Platforms
         this.platforms.forEach(plat => {
             if (plat.semi) {
@@ -1040,38 +1327,38 @@ class SmashGame {
                 // Main platform
                 this.ctx.fillStyle = '#1e293b';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-                
+
                 this.ctx.fillStyle = '#6366f1'; // Glowing trim
                 this.ctx.fillRect(plat.x, plat.y, plat.w, 4);
             }
         });
-        
+
         // Draw Projectiles
         this.projectiles.forEach(pr => {
             this.ctx.fillStyle = pr.type === 'fireball' ? '#f59e0b' : '#38bdf8';
             this.ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
         });
-        
+
         // Draw Players
         this.players.forEach(p => {
             if (p.respawning) return;
-            
+
             this.ctx.save();
-            
+
             // Respawn flashing
             if (p.invulnerable > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
                 this.ctx.globalAlpha = 0.4;
             }
-            
+
             // Draw character model
             const bodyColor = p.facing === 1 ? p.charData.color : p.charData.colorAlt;
             this.ctx.fillStyle = bodyColor;
-            
+
             // Draw rounded body
             this.ctx.beginPath();
             this.ctx.roundRect(p.x, p.y, p.w, p.h, [8]);
             this.ctx.fill();
-            
+
             // Check if player has selected a custom head image
             const headImg = headImages[p.name];
             if (headImg && headImg.complete) {
@@ -1093,7 +1380,7 @@ class SmashGame {
                 const visorX = p.facing === 1 ? p.x + p.w - 12 : p.x + 2;
                 this.ctx.fillRect(visorX, p.y + 10, visorW, visorH);
             }
-            
+
             // Draw shield bubble
             if (p.shieldActive) {
                 this.ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
@@ -1105,7 +1392,7 @@ class SmashGame {
                 this.ctx.fill();
                 this.ctx.stroke();
             }
-            
+
             // Stun effect
             if (p.hitStun > 0) {
                 this.ctx.strokeStyle = '#ef4444';
@@ -1116,10 +1403,49 @@ class SmashGame {
                 this.ctx.lineWidth = 2;
                 this.ctx.strokeRect(p.x - 2, p.y - 2, p.w + 4, p.h + 4);
             }
-            
+
+            // Draw charging effect for Balanceado
+            if (p.charData.name === "Balanceado" && p.balanceadoCharge > 0) {
+                const chargeProgress = Math.min(1, p.balanceadoCharge / 60);
+                const radius = 6 + chargeProgress * 14;
+                this.ctx.fillStyle = `rgba(245, 158, 11, ${0.4 + chargeProgress * 0.6})`;
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1 + chargeProgress * 2;
+
+                this.ctx.beginPath();
+                this.ctx.arc(p.x + p.w / 2 + p.facing * 12, p.y + p.h / 3, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+
+            // Draw charging/sparkles effect for Veloz
+            if (p.charData.name === "Veloz" && p.velozCharge > 0) {
+                const chargeProgress = Math.min(1, p.velozCharge / 45);
+                this.ctx.fillStyle = 'rgba(251, 191, 36, 0.5)';
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                for (let i = 0; i < 3; i++) {
+                    const offsetAngle = (Date.now() / 100 + i * 2) % (Math.PI * 2);
+                    const rx = p.x + p.w / 2 + Math.cos(offsetAngle) * (15 + chargeProgress * 10);
+                    const ry = p.y + p.h / 2 + Math.sin(offsetAngle) * (15 + chargeProgress * 10);
+                    this.ctx.beginPath();
+                    this.ctx.arc(rx, ry, 2 + chargeProgress * 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
+            }
+
+            // Draw motion trail for Veloz
+            if (p.charData.name === "Veloz" && p.velozDashTimer > 0) {
+                this.ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
+                this.ctx.fillRect(p.x - p.facing * 15, p.y, p.w, p.h);
+                this.ctx.fillStyle = 'rgba(251, 191, 36, 0.15)';
+                this.ctx.fillRect(p.x - p.facing * 30, p.y, p.w, p.h);
+            }
+
             this.ctx.restore();
         });
-        
+
         // Draw Particles
         this.particles.forEach(part => {
             this.ctx.fillStyle = part.color;
@@ -1129,7 +1455,7 @@ class SmashGame {
             this.ctx.fill();
         });
         this.ctx.globalAlpha = 1.0;
-        
+
         this.ctx.restore();
     }
 }

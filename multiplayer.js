@@ -7,98 +7,138 @@ let guestIndex = null; // Guest assigned index (1, 2, or 3)
 let lobbyPlayersState = []; // Holds current lobby name/chars state
 
 // Initialize PeerJS connection
-function initMultiplayer() {
+function initMultiplayer(asHost = true) {
     if (peer) return;
     
-    // Instantiate Peer
-    peer = new Peer();
+    const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
     
-    peer.on('open', (id) => {
-        myId = id;
-        document.getElementById('my-id').textContent = id;
-        showToast("¡Lobby listo! Comparte tu ID.");
-    });
-    
-    // ESCENARIO A: Alguien se conecta a nosotros (Anfitrión / Host)
-    peer.on('connection', (conn) => {
-        if (connections.length >= 3) {
-            const rejectLobby = () => {
-                conn.send({ type: 'lobby_full' });
-                setTimeout(() => conn.close(), 500);
-            };
-            if (conn.open) {
-                rejectLobby();
-            } else {
-                conn.on('open', rejectLobby);
-            }
-            return;
+    const tryConnect = (code) => {
+        if (asHost) {
+            const customId = 'smashturbanda-' + code;
+            peer = new Peer(customId);
+        } else {
+            peer = new Peer();
         }
         
-        isHost = true;
-        connections.push(conn);
+        peer.on('open', (id) => {
+            if (asHost) {
+                myId = code;
+                document.getElementById('my-id').textContent = code;
+                showToast("¡Lobby listo! Código: " + code);
+            } else {
+                myId = id;
+            }
+        });
         
-        const handleOpenConnection = () => {
-            showToast(`¡Jugador ${connections.length + 1} conectado!`);
-            document.getElementById('menu-lobby').classList.add('hidden');
-            document.getElementById('menu-css').classList.remove('hidden');
+        // ESCENARIO A: Alguien se conecta a nosotros (Anfitrión / Host)
+        peer.on('connection', (conn) => {
+            if (connections.length >= 3) {
+                const rejectLobby = () => {
+                    conn.send({ type: 'lobby_full' });
+                    setTimeout(() => conn.close(), 500);
+                };
+                if (conn.open) {
+                    rejectLobby();
+                } else {
+                    conn.on('open', rejectLobby);
+                }
+                return;
+            }
             
-            // Assign index to guest
-            conn.send({
-                type: 'assign_player',
-                playerIndex: connections.length // 1, 2, or 3
+            isHost = true;
+            connections.push(conn);
+            
+            const handleOpenConnection = () => {
+                showToast(`¡Jugador ${connections.length + 1} conectado!`);
+                document.getElementById('menu-lobby').classList.add('hidden');
+                document.getElementById('menu-css').classList.remove('hidden');
+                
+                // Assign index to guest
+                conn.send({
+                    type: 'assign_player',
+                    playerIndex: connections.length // 1, 2, or 3
+                });
+                
+                // Send updated lobby state to all
+                sendLobbySync();
+            };
+
+            if (conn.open) {
+                handleOpenConnection();
+            } else {
+                conn.on('open', handleOpenConnection);
+            }
+            
+            conn.on('data', (data) => {
+                handleReceivedData(data, conn);
             });
             
-            // Send updated lobby state to all
-            sendLobbySync();
-        };
-
-        if (conn.open) {
-            handleOpenConnection();
-        } else {
-            conn.on('open', handleOpenConnection);
-        }
-        
-        conn.on('data', (data) => {
-            handleReceivedData(data, conn);
+            conn.on('close', () => {
+                showToast("Un oponente se ha desconectado");
+                const idx = connections.indexOf(conn);
+                if (idx !== -1) {
+                    connections.splice(idx, 1);
+                    // Re-assign indices to remaining guests
+                    connections.forEach((c, i) => {
+                        c.send({
+                            type: 'assign_player',
+                            playerIndex: i + 1
+                        });
+                    });
+                }
+                if (gameEngine.running) {
+                    gameEngine.running = false;
+                    setTimeout(() => window.location.reload(), 1500);
+                } else {
+                    sendLobbySync();
+                }
+            });
         });
         
-        conn.on('close', () => {
-            showToast("Un oponente se ha desconectado");
-            const idx = connections.indexOf(conn);
-            if (idx !== -1) {
-                connections.splice(idx, 1);
-            }
-            if (gameEngine.running) {
-                gameEngine.running = false;
-                setTimeout(() => window.location.reload(), 1500);
+        peer.on('error', (err) => {
+            console.error("PeerJS error:", err);
+            if (asHost && err.type === 'unavailable-id') {
+                console.log("ID taken, retrying with new code...");
+                peer.destroy();
+                peer = null;
+                tryConnect(generateRoomCode());
             } else {
-                sendLobbySync();
+                showToast(`Error de conexión: ${err.type}`);
+                const connectBtn = document.getElementById('btn-connect-peer');
+                if (connectBtn) {
+                    connectBtn.textContent = 'Conectar a Sala';
+                    connectBtn.disabled = false;
+                }
             }
         });
-    });
-    
-    peer.on('error', (err) => {
-        console.error("PeerJS error:", err);
-        showToast(`Error de conexión: ${err.type}`);
-    });
+    };
+
+    tryConnect(asHost ? generateRoomCode() : null);
 }
 
 // ESCENARIO B: Nos conectamos a alguien (Invitado / Guest)
 document.getElementById('btn-connect-peer').addEventListener('click', () => {
-    const peerId = document.getElementById('peer-id-input').value.trim();
-    if (!peerId) {
-        showToast("Por favor introduce un ID válido");
+    const code = document.getElementById('peer-id-input').value.trim();
+    if (!code || code.length !== 4 || isNaN(code)) {
+        showToast("Por favor introduce un código de 4 dígitos válido");
         return;
     }
     
+    const connectBtn = document.getElementById('btn-connect-peer');
+    connectBtn.textContent = "Conectando...";
+    connectBtn.disabled = true;
+    
     showToast("Conectando...");
-    connection = peer.connect(peerId);
+    const targetPeerId = 'smashturbanda-' + code;
+    connection = peer.connect(targetPeerId);
     isHost = false;
     
     connection.on('open', () => {
         showToast("Conectado con el servidor. Esperando asignación...");
         document.getElementById('menu-lobby').classList.add('hidden');
         document.getElementById('menu-css').classList.remove('hidden');
+        connectBtn.textContent = "Conectar a Sala";
+        connectBtn.disabled = false;
     });
     
     connection.on('data', (data) => {
@@ -108,9 +148,18 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     connection.on('close', () => {
         showToast("Conexión perdida con el host");
         gameEngine.running = false;
+        connectBtn.textContent = "Conectar a Sala";
+        connectBtn.disabled = false;
         setTimeout(() => {
             window.location.reload();
         }, 1500);
+    });
+
+    connection.on('error', (err) => {
+        console.error("Connection error:", err);
+        showToast("Error de conexión. Inténtalo de nuevo.");
+        connectBtn.textContent = "Conectar a Sala";
+        connectBtn.disabled = false;
     });
 });
 
@@ -334,6 +383,17 @@ function updateCSSVisuals() {
             card.classList.add('selected');
         }
     });
+
+    // Hide/show rules container and start button for guests
+    const rulesContainer = document.getElementById('game-rules-container');
+    const startBtn = document.getElementById('btn-css-start');
+    if (gameEngine.mode === 'vs_online' && !isHost) {
+        if (rulesContainer) rulesContainer.classList.add('hidden');
+        if (startBtn) startBtn.classList.add('hidden');
+    } else {
+        if (rulesContainer) rulesContainer.classList.remove('hidden');
+        if (startBtn) startBtn.classList.remove('hidden');
+    }
 }
 
 function sendCSSState() {
@@ -457,6 +517,32 @@ function handleReceivedData(data, senderConn) {
         if (!isHost && gameEngine.running) {
             applyHostStateToGuest(data.state);
         }
+    } else if (data.type === 'match_end') {
+        gameEngine.running = false;
+        if (gameEngine.updateInterval) {
+            clearInterval(gameEngine.updateInterval);
+            gameEngine.updateInterval = null;
+        }
+        document.getElementById('game-hud').classList.add('hidden');
+        
+        const pauseWinnerEl = document.getElementById('pause-winner');
+        pauseWinnerEl.textContent = data.winner === "Empate" ? "¡EMPATE!" : `¡GANADOR: ${data.winner}!`;
+        document.getElementById('pause-title').textContent = "FIN DE LA PARTIDA";
+        document.getElementById('btn-pause-resume').classList.add('hidden');
+        
+        document.getElementById('menu-pause').classList.remove('hidden');
+    } else if (data.type === 'go_to_css') {
+        gameEngine.running = false;
+        if (gameEngine.updateInterval) {
+            clearInterval(gameEngine.updateInterval);
+            gameEngine.updateInterval = null;
+        }
+        document.getElementById('game-hud').classList.add('hidden');
+        const timerEl = document.getElementById('game-timer');
+        if (timerEl) timerEl.classList.add('hidden');
+        document.getElementById('menu-pause').classList.add('hidden');
+        document.getElementById('menu-css').classList.remove('hidden');
+        updateCSSVisuals();
     }
 }
 
@@ -578,18 +664,6 @@ function overrideGameLoopForP2P() {
                     inputs: inputs
                 });
             }
-            
-            // Settle particles local movements (visual only)
-            for (let i = gameEngine.particles.length - 1; i >= 0; i--) {
-                const part = gameEngine.particles[i];
-                part.x += part.vx;
-                part.y += part.vy;
-                part.alpha = Math.max(0, part.life / 60);
-                part.life--;
-                if (part.life <= 0) {
-                    gameEngine.particles.splice(i, 1);
-                }
-            }
         }
     };
 }
@@ -608,8 +682,10 @@ function packPlayerState(p) {
         shieldActive: p.shieldActive,
         shieldStrength: p.shieldStrength,
         invulnerable: p.invulnerable,
-        hitStun: p.hitStun,
-        shieldStun: p.shieldStun
+        velozCharge: p.velozCharge || 0,
+        velozDashTimer: p.velozDashTimer || 0,
+        upSpecialUsed: p.upSpecialUsed || false,
+        velozDashUsed: p.velozDashUsed || false
     };
 }
 
@@ -624,12 +700,27 @@ function applyHostStateToGuest(state) {
         });
         
         gameEngine.projectiles = state.projectiles || [];
-        if (state.particles && gameEngine.particles && state.particles.length > gameEngine.particles.length) {
-            gameEngine.particles = state.particles;
-        }
+        gameEngine.particles = state.particles || [];
         
         gameEngine.timeRemaining = state.time !== undefined ? state.time : 0;
         gameEngine.updateHUD();
+
+        // Update countdown timer on Guest
+        const timerEl = document.getElementById('game-timer');
+        if (timerEl) {
+            if (gameEngine.matchType === 'time' && gameEngine.mode !== 'training' && gameEngine.running) {
+                timerEl.classList.remove('hidden');
+                const totalSeconds = Math.max(0, Math.ceil(gameEngine.timeRemaining / 60));
+                const mins = Math.floor(totalSeconds / 60);
+                const secs = totalSeconds % 60;
+                const formattedTime = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                if (timerEl.textContent !== formattedTime) {
+                    timerEl.textContent = formattedTime;
+                }
+            } else {
+                timerEl.classList.add('hidden');
+            }
+        }
     } catch (e) {
         console.error("Error in applyHostStateToGuest:", e);
     }
@@ -650,6 +741,11 @@ function unpackPlayerState(p, state) {
     p.invulnerable = state.invulnerable;
     p.hitStun = state.hitStun;
     p.shieldStun = state.shieldStun;
+    p.balanceadoCharge = state.balanceadoCharge || 0;
+    p.velozCharge = state.velozCharge || 0;
+    p.velozDashTimer = state.velozDashTimer || 0;
+    p.upSpecialUsed = state.upSpecialUsed || false;
+    p.velozDashUsed = state.velozDashUsed || false;
 }
 
 // Menu Navigations
@@ -689,8 +785,13 @@ document.getElementById('btn-vs-online').addEventListener('click', () => {
     document.getElementById('cpu-diff-label').style.display = 'none';
     document.getElementById('p2-ref-container').style.display = 'none';
     document.getElementById('menu-main').classList.add('hidden');
+    
+    // Switch to role selection and reset views
+    document.getElementById('lobby-role-select').classList.remove('hidden');
+    document.getElementById('lobby-host-view').classList.add('hidden');
+    document.getElementById('lobby-guest-view').classList.add('hidden');
+    
     document.getElementById('menu-lobby').classList.remove('hidden');
-    initMultiplayer();
 });
 
 document.getElementById('btn-css-back').addEventListener('click', () => {
@@ -746,6 +847,35 @@ document.getElementById('btn-pause-exit').addEventListener('click', () => {
     if (connection) {
         connection.close();
     }
+    if (isHost) {
+        connections.forEach(conn => {
+            if (conn) conn.close();
+        });
+        connections = [];
+    }
+});
+
+document.getElementById('btn-pause-lobby').addEventListener('click', () => {
+    if (gameEngine.mode === 'vs_online') {
+        if (isHost) {
+            broadcast({ type: 'go_to_css' });
+        } else {
+            showToast("Esperando a que el Host inicie el retorno...");
+            return;
+        }
+    }
+    
+    gameEngine.running = false;
+    if (gameEngine.updateInterval) {
+        clearInterval(gameEngine.updateInterval);
+        gameEngine.updateInterval = null;
+    }
+    document.getElementById('game-hud').classList.add('hidden');
+    const timerEl = document.getElementById('game-timer');
+    if (timerEl) timerEl.classList.add('hidden');
+    document.getElementById('menu-pause').classList.add('hidden');
+    document.getElementById('menu-css').classList.remove('hidden');
+    updateCSSVisuals();
 });
 
 // Esc Key for pausing (Local vs only)
@@ -895,16 +1025,56 @@ function updateControlsQuickRef() {
     document.getElementById('p2-ref-keys').textContent = p2KeysText;
 }
 
+function initLobbyUI() {
+    // Choose Host (Create Room)
+    document.getElementById('btn-lobby-choose-host').addEventListener('click', () => {
+        document.getElementById('lobby-role-select').classList.add('hidden');
+        document.getElementById('lobby-host-view').classList.remove('hidden');
+        initMultiplayer();
+    });
+
+    // Choose Guest (Join Room)
+    document.getElementById('btn-lobby-choose-guest').addEventListener('click', () => {
+        document.getElementById('lobby-role-select').classList.add('hidden');
+        document.getElementById('lobby-guest-view').classList.remove('hidden');
+        initMultiplayer(false);
+    });
+
+    // Host back to selection
+    document.getElementById('btn-host-back').addEventListener('click', () => {
+        document.getElementById('lobby-host-view').classList.add('hidden');
+        document.getElementById('lobby-role-select').classList.remove('hidden');
+    });
+
+    // Guest back to selection
+    document.getElementById('btn-guest-back').addEventListener('click', () => {
+        document.getElementById('lobby-guest-view').classList.add('hidden');
+        document.getElementById('lobby-role-select').classList.remove('hidden');
+    });
+
+    // Copy to clipboard
+    document.getElementById('btn-copy-id').addEventListener('click', () => {
+        if (!myId) return;
+        navigator.clipboard.writeText(myId).then(() => {
+            showToast("¡Código de sala copiado!");
+        }).catch(err => {
+            console.error("Could not copy text: ", err);
+        });
+    });
+}
+
 // Initialise everything once script runs
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', () => {
         initCSSListeners();
         initVolumeControl();
         updateControlsQuickRef();
+        initLobbyUI();
     });
 } else {
     initCSSListeners();
     initVolumeControl();
     updateControlsQuickRef();
+    initLobbyUI();
 }
 
