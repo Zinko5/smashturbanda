@@ -322,6 +322,15 @@ function initCSSListeners() {
 }
 
 function updateCSSVisuals() {
+    const stageSelEl = document.getElementById('css-stage-selection');
+    if (stageSelEl) {
+        if (gameEngine.mode === 'vs_online' && !isHost) {
+            stageSelEl.style.display = 'none';
+        } else {
+            stageSelEl.style.display = 'block';
+        }
+    }
+
     // Reset selections
     document.querySelectorAll('.char-card').forEach(card => {
         card.className = 'char-card';
@@ -633,8 +642,20 @@ function overrideGameLoopForP2P() {
                         projectiles: gameEngine.projectiles.map(pr => ({
                             x: pr.x, y: pr.y, w: pr.w, h: pr.h, type: pr.type
                         })),
+                        platforms: gameEngine.platforms.map(plat => ({
+                            x: plat.x, y: plat.y
+                        })),
                         particles: gameEngine.particles.map(pt => ({
                             x: pt.x, y: pt.y, radius: pt.radius, color: pt.color, alpha: pt.alpha
+                        })),
+                        items: gameEngine.items.map(item => ({
+                            x: item.x, y: item.y, w: item.w, h: item.h, type: item.type
+                        })),
+                        pumas: gameEngine.pumas.map(puma => ({
+                            x: puma.x, y: puma.y, w: puma.w, h: puma.h
+                        })),
+                        bombers: gameEngine.bombers.map(b => ({
+                            x: b.x, y: b.y, w: b.w, h: b.h
                         })),
                         time: gameEngine.timeRemaining
                     }
@@ -685,7 +706,10 @@ function packPlayerState(p) {
         velozCharge: p.velozCharge || 0,
         velozDashTimer: p.velozDashTimer || 0,
         upSpecialUsed: p.upSpecialUsed || false,
-        velozDashUsed: p.velozDashUsed || false
+        velozDashUsed: p.velozDashUsed || false,
+        voladorFlying: p.voladorFlying || false,
+        voladorBombCooldown: p.voladorBombCooldown || 0,
+        heldItem: p.heldItem || null
     };
 }
 
@@ -701,7 +725,19 @@ function applyHostStateToGuest(state) {
         
         gameEngine.projectiles = state.projectiles || [];
         gameEngine.particles = state.particles || [];
+        gameEngine.items = state.items || [];
+        gameEngine.pumas = state.pumas || [];
+        gameEngine.bombers = state.bombers || [];
         
+        if (state.platforms) {
+            state.platforms.forEach((platState, idx) => {
+                if (gameEngine.platforms[idx]) {
+                    gameEngine.platforms[idx].x = platState.x;
+                    gameEngine.platforms[idx].y = platState.y;
+                }
+            });
+        }
+
         gameEngine.timeRemaining = state.time !== undefined ? state.time : 0;
         gameEngine.updateHUD();
 
@@ -746,6 +782,9 @@ function unpackPlayerState(p, state) {
     p.velozDashTimer = state.velozDashTimer || 0;
     p.upSpecialUsed = state.upSpecialUsed || false;
     p.velozDashUsed = state.velozDashUsed || false;
+    p.voladorFlying = state.voladorFlying || false;
+    p.voladorBombCooldown = state.voladorBombCooldown || 0;
+    p.heldItem = state.heldItem || null;
 }
 
 // Menu Navigations
