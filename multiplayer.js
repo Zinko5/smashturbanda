@@ -994,7 +994,7 @@ function renderOptionsKeys() {
 }
 
 // Floating Volume Control logic
-let lastActiveVolume = sfxVolume || 0.7;
+let lastActiveVolume = sfxVolume || 0.15;
 
 function updateVolumeUI() {
     const slider = document.getElementById('volume-range-floating');

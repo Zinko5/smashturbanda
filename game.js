@@ -159,7 +159,7 @@ try {
         const parsed = JSON.parse(saved);
         if (parsed.controls) controls = parsed.controls;
         if (parsed.volume !== undefined) {
-            sfxVolume = parsed.volume;
+            sfxVolume = parsed.volume === 0.7 ? 0.15 : parsed.volume;
             document.getElementById('slider-sfx').value = sfxVolume;
         }
     }
