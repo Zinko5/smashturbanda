@@ -9,9 +9,9 @@ let lobbyPlayersState = []; // Holds current lobby name/chars state
 // Initialize PeerJS connection
 function initMultiplayer(asHost = true) {
     if (peer) return;
-    
+
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
-    
+
     const tryConnect = (code) => {
         if (asHost) {
             const customId = 'smashturbanda-' + code;
@@ -19,7 +19,7 @@ function initMultiplayer(asHost = true) {
         } else {
             peer = new Peer();
         }
-        
+
         peer.on('open', (id) => {
             if (asHost) {
                 myId = code;
@@ -29,7 +29,7 @@ function initMultiplayer(asHost = true) {
                 myId = id;
             }
         });
-        
+
         // ESCENARIO A: Alguien se conecta a nosotros (Anfitrión / Host)
         peer.on('connection', (conn) => {
             if (connections.length >= 3) {
@@ -44,21 +44,21 @@ function initMultiplayer(asHost = true) {
                 }
                 return;
             }
-            
+
             isHost = true;
             connections.push(conn);
-            
+
             const handleOpenConnection = () => {
                 showToast(`¡Jugador ${connections.length + 1} conectado!`);
                 document.getElementById('menu-lobby').classList.add('hidden');
                 document.getElementById('menu-css').classList.remove('hidden');
-                
+
                 // Assign index to guest
                 conn.send({
                     type: 'assign_player',
                     playerIndex: connections.length // 1, 2, or 3
                 });
-                
+
                 // Send updated lobby state to all
                 sendLobbySync();
             };
@@ -68,11 +68,11 @@ function initMultiplayer(asHost = true) {
             } else {
                 conn.on('open', handleOpenConnection);
             }
-            
+
             conn.on('data', (data) => {
                 handleReceivedData(data, conn);
             });
-            
+
             conn.on('close', () => {
                 showToast("Un oponente se ha desconectado");
                 const idx = connections.indexOf(conn);
@@ -94,7 +94,7 @@ function initMultiplayer(asHost = true) {
                 }
             });
         });
-        
+
         peer.on('error', (err) => {
             console.error("PeerJS error:", err);
             if (asHost && err.type === 'unavailable-id') {
@@ -116,6 +116,13 @@ function initMultiplayer(asHost = true) {
     tryConnect(asHost ? generateRoomCode() : null);
 }
 
+// Permite usar la tecla Enter en el input de conectar a sala
+document.getElementById('peer-id-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        document.getElementById('btn-connect-peer').click();
+    }
+});
+
 // ESCENARIO B: Nos conectamos a alguien (Invitado / Guest)
 document.getElementById('btn-connect-peer').addEventListener('click', () => {
     const code = document.getElementById('peer-id-input').value.trim();
@@ -123,16 +130,16 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
         showToast("Por favor introduce un código de 4 dígitos válido");
         return;
     }
-    
+
     const connectBtn = document.getElementById('btn-connect-peer');
     connectBtn.textContent = "Conectando...";
     connectBtn.disabled = true;
-    
+
     showToast("Conectando...");
     const targetPeerId = 'smashturbanda-' + code;
     connection = peer.connect(targetPeerId);
     isHost = false;
-    
+
     connection.on('open', () => {
         showToast("Conectado con el servidor. Esperando asignación...");
         document.getElementById('menu-lobby').classList.add('hidden');
@@ -140,11 +147,11 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
         connectBtn.textContent = "Conectar a Sala";
         connectBtn.disabled = false;
     });
-    
+
     connection.on('data', (data) => {
         handleReceivedData(data);
     });
-    
+
     connection.on('close', () => {
         showToast("Conexión perdida con el host");
         gameEngine.running = false;
@@ -203,7 +210,7 @@ function initCSSListeners() {
             const char = card.getAttribute('data-char');
             selectedCharLocal = char;
             playSynthSound('jump');
-            
+
             if (gameEngine.mode === 'vs_online') {
                 sendCSSState();
             } else {
@@ -233,7 +240,7 @@ function initCSSListeners() {
         card.addEventListener('click', (e) => {
             const name = card.getAttribute('data-name');
             playSynthSound('jump');
-            
+
             if (gameEngine.mode === 'vs_online') {
                 // Check if taken by another player
                 const takenByOther = lobbyPlayersState.some((player, idx) => {
@@ -241,7 +248,7 @@ function initCSSListeners() {
                     return player.customName === name && !isMe;
                 });
                 if (takenByOther) return; // Do not allow selection
-                
+
                 selectedNameLocal = (selectedNameLocal === name) ? null : name;
                 sendCSSState();
             } else {
@@ -256,7 +263,7 @@ function initCSSListeners() {
             updateCSSVisuals();
         });
     });
-    
+
     // Stage selection listeners
     document.querySelectorAll('.stage-card').forEach(card => {
         card.addEventListener('click', () => {
@@ -273,7 +280,7 @@ function initCSSListeners() {
             }
         });
     });
-    
+
     // Mode listener
     document.getElementById('game-mode-select').addEventListener('change', (e) => {
         if (gameEngine.mode === 'vs_online' && !isHost) {
@@ -283,7 +290,7 @@ function initCSSListeners() {
             return;
         }
         selectedModeLocal = e.target.value;
-        
+
         // Toggle limits UI
         if (selectedModeLocal === 'stocks') {
             document.getElementById('stocks-limit-label').style.display = 'flex';
@@ -292,7 +299,7 @@ function initCSSListeners() {
             document.getElementById('stocks-limit-label').style.display = 'none';
             document.getElementById('time-limit-label').style.display = 'flex';
         }
-        
+
         if (gameEngine.mode === 'vs_online') {
             sendCSSState();
         }
@@ -345,7 +352,7 @@ function updateCSSVisuals() {
             if (card) {
                 card.classList.add(`selected-p${idx + 1}`);
             }
-            
+
             if (player.customName) {
                 const nCard = document.querySelector(`.name-card[data-name="${player.customName}"]`);
                 if (nCard) {
@@ -353,7 +360,7 @@ function updateCSSVisuals() {
                 }
             }
         });
-        
+
         // Disable names selected by other players
         document.querySelectorAll('.name-card').forEach(nCard => {
             const name = nCard.getAttribute('data-name');
@@ -367,13 +374,13 @@ function updateCSSVisuals() {
         });
     } else {
         if (!selectedCharRemote) selectedCharRemote = 'veloz';
-        
+
         document.querySelectorAll('.char-card').forEach(card => {
             const char = card.getAttribute('data-char');
             if (char === selectedCharLocal) card.classList.add('selected-p1');
             if (char === selectedCharRemote) card.classList.add('selected-p2');
         });
-        
+
         if (selectedNameLocal) {
             const nCard = document.querySelector(`.name-card[data-name="${selectedNameLocal}"]`);
             if (nCard) nCard.classList.add('selected-p1');
@@ -383,7 +390,7 @@ function updateCSSVisuals() {
             if (nCard) nCard.classList.add('selected-p2');
         }
     }
-    
+
     document.querySelectorAll('.stage-card').forEach(card => {
         card.classList.remove('selected');
         const st = card.getAttribute('data-stage');
@@ -422,9 +429,9 @@ function sendCSSState() {
 function sendLobbySync() {
     // Exclusivity collision check: Host has priority, then Guest connections in order of registration.
     const namePool = { Alex: null, Martín: null, Víctor: null, Gabriel: null };
-    
+
     if (selectedNameLocal) namePool[selectedNameLocal] = 'host';
-    
+
     connections.forEach((conn) => {
         if (conn.selectedCustomName) {
             if (namePool[conn.selectedCustomName]) {
@@ -436,10 +443,10 @@ function sendLobbySync() {
     });
 
     const players = [
-        { 
-            name: selectedNameLocal || "Host (P1)", 
-            char: selectedCharLocal, 
-            customName: selectedNameLocal 
+        {
+            name: selectedNameLocal || "Host (P1)",
+            char: selectedCharLocal,
+            customName: selectedNameLocal
         }
     ];
     connections.forEach((conn, idx) => {
@@ -451,10 +458,10 @@ function sendLobbySync() {
     });
     lobbyPlayersState = players;
     updateCSSVisuals();
-    
+
     const stocksLimitVal = parseInt(document.getElementById('game-stocks-select').value) || 3;
     const timeLimitVal = parseInt(document.getElementById('game-time-select').value) || 2;
-    
+
     broadcast({
         type: 'lobby_sync',
         players: players,
@@ -484,7 +491,7 @@ function handleReceivedData(data, senderConn) {
         selectedStageLocal = data.stage;
         selectedModeLocal = data.mode;
         document.getElementById('game-mode-select').value = data.mode;
-        
+
         // Toggle limits UI
         if (data.mode === 'stocks') {
             document.getElementById('stocks-limit-label').style.display = 'flex';
@@ -493,14 +500,14 @@ function handleReceivedData(data, senderConn) {
             document.getElementById('stocks-limit-label').style.display = 'none';
             document.getElementById('time-limit-label').style.display = 'flex';
         }
-        
+
         if (data.stocksLimit !== undefined) {
             document.getElementById('game-stocks-select').value = data.stocksLimit;
         }
         if (data.timeLimit !== undefined) {
             document.getElementById('game-time-select').value = data.timeLimit;
         }
-        
+
         // Sync custom name selection in case Host reset it due to collision
         const mySlot = lobbyPlayersState[guestIndex];
         if (mySlot) {
@@ -533,13 +540,17 @@ function handleReceivedData(data, senderConn) {
             gameEngine.updateInterval = null;
         }
         document.getElementById('game-hud').classList.add('hidden');
-        
+
         const pauseWinnerEl = document.getElementById('pause-winner');
         pauseWinnerEl.textContent = data.winner === "Empate" ? "¡EMPATE!" : `¡GANADOR: ${data.winner}!`;
         document.getElementById('pause-title').textContent = "FIN DE LA PARTIDA";
         document.getElementById('btn-pause-resume').classList.add('hidden');
-        
+
         document.getElementById('menu-pause').classList.remove('hidden');
+
+        if (typeof playMenuMusic === 'function') {
+            playMenuMusic();
+        }
     } else if (data.type === 'go_to_css') {
         gameEngine.running = false;
         if (gameEngine.updateInterval) {
@@ -569,7 +580,7 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
             showToast("Esperando a que el Host inicie la pelea...");
             return;
         }
-        
+
         // Build players config
         const playersConfig = [
             { id: 'p1', name: selectedNameLocal || "Host (P1)", char: selectedCharLocal }
@@ -581,7 +592,7 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
                 char: conn.selectedChar || 'veloz'
             });
         });
-        
+
         // Host starts match
         broadcast({
             type: 'css_start',
@@ -591,7 +602,7 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
             stocksLimit: stocksLimitVal,
             timeLimit: timeLimitVal
         });
-        
+
         gameEngine.setupMatch('vs_online', playersConfig, selectedStageLocal, selectedModeLocal, stocksLimitVal, timeLimitVal);
         overrideGameLoopForP2P();
     } else {
@@ -602,7 +613,7 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
         const stage = document.querySelector('.stage-card.selected').getAttribute('data-stage');
         const rule = document.getElementById('game-mode-select').value;
         const diff = document.getElementById('cpu-diff-select').value;
-        
+
         let playersConfig = [];
         if (mode === 'vs_local') {
             playersConfig = [
@@ -620,20 +631,20 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
                 { id: 'p2', name: selectedNameRemote || 'CPU Dummy', char: p2 }
             ];
         }
-        
+
         gameEngine.setupMatch(mode, playersConfig, stage, rule, stocksLimitVal, timeLimitVal, diff);
     }
 });
 
 function overrideGameLoopForP2P() {
     const originalUpdate = gameEngine.update.bind(gameEngine);
-    
+
     gameEngine.update = () => {
         if (isHost) {
             // Host computes physics
             originalUpdate();
-            
-            // Send full computed coordinates/scores/stocks to all guests
+
+            // Send computed coordinates/scores/stocks to all guests (omitting static platforms and visual particles)
             if (connections.length > 0) {
                 broadcast({
                     type: 'host_state',
@@ -641,12 +652,6 @@ function overrideGameLoopForP2P() {
                         players: gameEngine.players.map(p => packPlayerState(p)),
                         projectiles: gameEngine.projectiles.map(pr => ({
                             x: pr.x, y: pr.y, w: pr.w, h: pr.h, type: pr.type
-                        })),
-                        platforms: gameEngine.platforms.map(plat => ({
-                            x: plat.x, y: plat.y
-                        })),
-                        particles: gameEngine.particles.map(pt => ({
-                            x: pt.x, y: pt.y, radius: pt.radius, color: pt.color, alpha: pt.alpha
                         })),
                         items: gameEngine.items.map(item => ({
                             x: item.x, y: item.y, w: item.w, h: item.h, type: item.type
@@ -657,6 +662,10 @@ function overrideGameLoopForP2P() {
                         bombers: gameEngine.bombers.map(b => ({
                             x: b.x, y: b.y, w: b.w, h: b.h
                         })),
+                        // Only broadcast platforms if at least one is moving to save bandwidth
+                        platforms: gameEngine.platforms.some(plat => plat.moving)
+                            ? gameEngine.platforms.map(plat => ({ x: plat.x, y: plat.y }))
+                            : null,
                         time: gameEngine.timeRemaining
                     }
                 });
@@ -665,7 +674,7 @@ function overrideGameLoopForP2P() {
             // Guest collects inputs and sends them to Host immediately
             const inputsP1 = gameEngine.getPlayerInputs('p1');
             const inputsP2 = gameEngine.getPlayerInputs('p2');
-            
+
             const inputs = {
                 left: inputsP1.left || inputsP2.left,
                 right: inputsP1.right || inputsP2.right,
@@ -685,6 +694,18 @@ function overrideGameLoopForP2P() {
                     inputs: inputs
                 });
             }
+
+            // Update particles locally on Guest (decreases network strain by 90%)
+            for (let i = gameEngine.particles.length - 1; i >= 0; i--) {
+                const pt = gameEngine.particles[i];
+                pt.x += pt.vx;
+                pt.y += pt.vy;
+                pt.vy += 0.2; // gravity effect
+                pt.alpha -= 1 / pt.life;
+                if (pt.alpha <= 0) {
+                    gameEngine.particles.splice(i, 1);
+                }
+            }
         }
     };
 }
@@ -703,32 +724,80 @@ function packPlayerState(p) {
         shieldActive: p.shieldActive,
         shieldStrength: p.shieldStrength,
         invulnerable: p.invulnerable,
+        isGrounded: p.isGrounded,
+        hitStun: p.hitStun || 0,
+        shieldStun: p.shieldStun || 0,
         velozCharge: p.velozCharge || 0,
         velozDashTimer: p.velozDashTimer || 0,
         upSpecialUsed: p.upSpecialUsed || false,
         velozDashUsed: p.velozDashUsed || false,
         voladorFlying: p.voladorFlying || false,
         voladorBombCooldown: p.voladorBombCooldown || 0,
-        heldItem: p.heldItem || null
+        heldItem: p.heldItem || null,
+        balanceadoCharge: p.balanceadoCharge || 0
     };
 }
 
 function applyHostStateToGuest(state) {
     try {
         if (!state || !state.players || gameEngine.players.length !== state.players.length) return;
-        
+
         state.players.forEach((pState, idx) => {
-            if (gameEngine.players[idx] && pState) {
-                unpackPlayerState(gameEngine.players[idx], pState);
+            const localPlayer = gameEngine.players[idx];
+            if (localPlayer && pState) {
+                // Trigger local visual feedback and sounds on hit (damage increase)
+                if (pState.damage > localPlayer.damage) {
+                    const diff = pState.damage - localPlayer.damage;
+                    // Spawn local hit particles
+                    for (let i = 0; i < Math.min(10, Math.floor(diff * 0.8) + 3); i++) {
+                        gameEngine.particles.push({
+                            x: pState.x + localPlayer.width / 2,
+                            y: pState.y + localPlayer.height / 2,
+                            vx: (Math.random() - 0.5) * 8,
+                            vy: (Math.random() - 0.5) * 8 - 2,
+                            radius: Math.random() * 4 + 2,
+                            color: localPlayer.colorAlt || '#ffffff',
+                            alpha: 1,
+                            life: 30
+                        });
+                    }
+                    playSynthSound(diff > 15 ? 'heavy_hit' : 'hit');
+                }
+
+                // Trigger local blast particles on death (stocks decrease)
+                if (pState.stocks < localPlayer.stocks) {
+                    // Use the previous position of the player (before unpack overwrites it with -9999)
+                    const deathX = Math.min(V_WIDTH, Math.max(0, localPlayer.x + (localPlayer.w || 40) / 2));
+                    const deathY = Math.min(V_HEIGHT, Math.max(0, localPlayer.y + (localPlayer.h || 50) / 2));
+                    const deathColor = (localPlayer.charData && localPlayer.charData.color) ? localPlayer.charData.color : '#ffffff';
+                    if (typeof createBlastParticles === 'function') {
+                        createBlastParticles(deathX, deathY, deathColor);
+                    }
+                    playSynthSound('death');
+                }
+
+                unpackPlayerState(localPlayer, pState);
             }
         });
-        
+
+        // Play item activation sound on Guest if new ones are spawned
+        if (state.pumas && state.pumas.length > gameEngine.pumas.length) {
+            if (typeof playSoundFile === 'function') {
+                playSoundFile('sound/puma.mp3');
+            }
+        }
+        if (state.bombers && state.bombers.length > gameEngine.bombers.length) {
+            if (typeof playSoundFile === 'function') {
+                playSoundFile('sound/strike.mp3', 4000);
+            }
+        }
+
         gameEngine.projectiles = state.projectiles || [];
-        gameEngine.particles = state.particles || [];
         gameEngine.items = state.items || [];
         gameEngine.pumas = state.pumas || [];
         gameEngine.bombers = state.bombers || [];
-        
+
+        // Synchronize platform coordinates on Guest if provided by Host
         if (state.platforms) {
             state.platforms.forEach((platState, idx) => {
                 if (gameEngine.platforms[idx]) {
@@ -775,6 +844,7 @@ function unpackPlayerState(p, state) {
     p.shieldActive = state.shieldActive;
     p.shieldStrength = state.shieldStrength;
     p.invulnerable = state.invulnerable;
+    p.isGrounded = state.isGrounded || false;
     p.hitStun = state.hitStun;
     p.shieldStun = state.shieldStun;
     p.balanceadoCharge = state.balanceadoCharge || 0;
@@ -795,6 +865,7 @@ document.getElementById('btn-vs-local').addEventListener('click', () => {
     document.getElementById('p2-ref-container').style.display = 'block';
     document.getElementById('menu-main').classList.add('hidden');
     document.getElementById('menu-css').classList.remove('hidden');
+    if (typeof playMenuMusic === 'function') playMenuMusic();
     updateCSSVisuals();
 });
 
@@ -805,6 +876,7 @@ document.getElementById('btn-vs-cpu').addEventListener('click', () => {
     document.getElementById('p2-ref-container').style.display = 'none';
     document.getElementById('menu-main').classList.add('hidden');
     document.getElementById('menu-css').classList.remove('hidden');
+    if (typeof playMenuMusic === 'function') playMenuMusic();
     updateCSSVisuals();
 });
 
@@ -815,6 +887,7 @@ document.getElementById('btn-training').addEventListener('click', () => {
     document.getElementById('p2-ref-container').style.display = 'none';
     document.getElementById('menu-main').classList.add('hidden');
     document.getElementById('menu-css').classList.remove('hidden');
+    if (typeof playMenuMusic === 'function') playMenuMusic();
     updateCSSVisuals();
 });
 
@@ -824,12 +897,12 @@ document.getElementById('btn-vs-online').addEventListener('click', () => {
     document.getElementById('cpu-diff-label').style.display = 'none';
     document.getElementById('p2-ref-container').style.display = 'none';
     document.getElementById('menu-main').classList.add('hidden');
-    
+
     // Switch to role selection and reset views
     document.getElementById('lobby-role-select').classList.remove('hidden');
     document.getElementById('lobby-host-view').classList.add('hidden');
     document.getElementById('lobby-guest-view').classList.add('hidden');
-    
+
     document.getElementById('menu-lobby').classList.remove('hidden');
 });
 
@@ -847,12 +920,16 @@ document.getElementById('btn-lobby-back').addEventListener('click', () => {
 document.getElementById('btn-options-menu').addEventListener('click', () => {
     document.getElementById('menu-main').classList.add('hidden');
     document.getElementById('menu-options').classList.remove('hidden');
+    if (typeof playMenuMusic === 'function') playMenuMusic();
     renderOptionsKeys();
 });
 
 document.getElementById('slider-sfx').addEventListener('input', (e) => {
     sfxVolume = parseFloat(e.target.value);
     updateVolumeUI();
+    if (typeof updateMenuMusicVolume === 'function') {
+        updateMenuMusicVolume();
+    }
 });
 
 document.getElementById('btn-options-save').addEventListener('click', () => {
@@ -892,6 +969,9 @@ document.getElementById('btn-pause-exit').addEventListener('click', () => {
         });
         connections = [];
     }
+    if (typeof playMenuMusic === 'function') {
+        playMenuMusic();
+    }
 });
 
 document.getElementById('btn-pause-lobby').addEventListener('click', () => {
@@ -903,8 +983,11 @@ document.getElementById('btn-pause-lobby').addEventListener('click', () => {
             return;
         }
     }
-    
+
     gameEngine.running = false;
+    if (typeof playMenuMusic === 'function') {
+        playMenuMusic();
+    }
     if (gameEngine.updateInterval) {
         clearInterval(gameEngine.updateInterval);
         gameEngine.updateInterval = null;
@@ -934,18 +1017,18 @@ window.addEventListener('keydown', (e) => {
 function renderOptionsKeys() {
     const p1Container = document.getElementById('p1-controls-list');
     p1Container.replaceChildren();
-    
+
     Object.keys(controls.p1).forEach(key => {
         const row = document.createElement('div');
         row.className = 'key-row';
-        
+
         const label = document.createElement('span');
         label.textContent = key.toUpperCase();
-        
+
         const valueBox = document.createElement('span');
         valueBox.className = 'key-value';
         valueBox.textContent = controls.p1[key];
-        
+
         valueBox.addEventListener('click', () => {
             valueBox.textContent = 'Presiona una tecla...';
             const listenKey = (ev) => {
@@ -956,7 +1039,7 @@ function renderOptionsKeys() {
             };
             window.addEventListener('keydown', listenKey);
         });
-        
+
         row.appendChild(label);
         row.appendChild(valueBox);
         p1Container.appendChild(row);
@@ -964,18 +1047,18 @@ function renderOptionsKeys() {
 
     const p2Container = document.getElementById('p2-controls-list');
     p2Container.replaceChildren();
-    
+
     Object.keys(controls.p2).forEach(key => {
         const row = document.createElement('div');
         row.className = 'key-row';
-        
+
         const label = document.createElement('span');
         label.textContent = key.toUpperCase();
-        
+
         const valueBox = document.createElement('span');
         valueBox.className = 'key-value';
         valueBox.textContent = controls.p2[key];
-        
+
         valueBox.addEventListener('click', () => {
             valueBox.textContent = 'Presiona una tecla...';
             const listenKey = (ev) => {
@@ -986,7 +1069,7 @@ function renderOptionsKeys() {
             };
             window.addEventListener('keydown', listenKey);
         });
-        
+
         row.appendChild(label);
         row.appendChild(valueBox);
         p2Container.appendChild(row);
@@ -1000,7 +1083,7 @@ function updateVolumeUI() {
     const slider = document.getElementById('volume-range-floating');
     const button = document.getElementById('btn-volume-toggle');
     if (slider) slider.value = sfxVolume;
-    
+
     if (button) {
         if (sfxVolume === 0) {
             button.textContent = '🔇';
@@ -1017,7 +1100,7 @@ function updateVolumeUI() {
 function initVolumeControl() {
     const slider = document.getElementById('volume-range-floating');
     const button = document.getElementById('btn-volume-toggle');
-    
+
     if (slider) {
         slider.value = sfxVolume;
         slider.addEventListener('input', (e) => {
@@ -1026,13 +1109,13 @@ function initVolumeControl() {
                 lastActiveVolume = sfxVolume;
             }
             updateVolumeUI();
-            
+
             // Sync with Options slider if it exists
             const optionsSlider = document.getElementById('slider-sfx');
             if (optionsSlider) optionsSlider.value = sfxVolume;
         });
     }
-    
+
     if (button) {
         button.addEventListener('click', () => {
             initAudio();
@@ -1044,7 +1127,7 @@ function initVolumeControl() {
             }
             updateVolumeUI();
             playSynthSound('shield');
-            
+
             // Sync with Options slider if it exists
             const optionsSlider = document.getElementById('slider-sfx');
             if (optionsSlider) optionsSlider.value = sfxVolume;
@@ -1056,10 +1139,10 @@ function initVolumeControl() {
 function updateControlsQuickRef() {
     // Format keys for display
     const cleanKey = (k) => k.replace('Key', '').replace('Arrow', '←/→/↑/↓ ');
-    
+
     const p1KeysText = `${cleanKey(controls.p1.left)}/${cleanKey(controls.p1.right)} (Mover) | ${cleanKey(controls.p1.jump)} (Saltar) | ${cleanKey(controls.p1.attackA)} (Ataque A) | ${cleanKey(controls.p1.attackB)} (Especial B) | ${cleanKey(controls.p1.shield)} (Escudo)`;
     const p2KeysText = `${cleanKey(controls.p2.left)}/${cleanKey(controls.p2.right)} (Mover) | ${cleanKey(controls.p2.jump)} (Saltar) | ${cleanKey(controls.p2.attackA)} (Ataque A) | ${cleanKey(controls.p2.attackB)} (Especial B) | ${cleanKey(controls.p2.shield)} (Escudo)`;
-    
+
     document.getElementById('p1-ref-keys').textContent = p1KeysText;
     document.getElementById('p2-ref-keys').textContent = p2KeysText;
 }

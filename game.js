@@ -22,151 +22,6 @@ const itemImages = {
 itemImages['puma'].src = 'img/activable-puma.png';
 itemImages['yahu-strike'].src = 'img/yahu-strike.png';
 
-// Web Audio API Context for Synthesis
-let audioCtx = null;
-let sfxVolume = 0.15;
-
-function initAudio() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-}
-
-function playSynthSound(type) {
-    if (!audioCtx) return;
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    const now = audioCtx.currentTime;
-    gain.gain.setValueAtTime(sfxVolume * 0.4, now);
-
-    if (type === 'jump') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.start(now);
-        osc.stop(now + 0.15);
-    } else if (type === 'hit') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(400, now);
-        osc.frequency.setValueAtTime(100, now + 0.05);
-        gain.gain.setValueAtTime(sfxVolume * 0.6, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    } else if (type === 'heavy_hit') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(200, now);
-        osc.frequency.exponentialRampToValueAtTime(60, now + 0.25);
-        gain.gain.setValueAtTime(sfxVolume * 0.8, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.3);
-    } else if (type === 'explosion') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(120, now);
-        osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
-        gain.gain.setValueAtTime(sfxVolume * 0.35, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-        osc.start(now);
-        osc.stop(now + 0.25);
-    } else if (type === 'shield') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.linearRampToValueAtTime(400, now + 0.1);
-        gain.gain.setValueAtTime(sfxVolume * 0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    } else if (type === 'shield_break') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(880, now);
-        osc.frequency.setValueAtTime(440, now + 0.08);
-        osc.frequency.setValueAtTime(220, now + 0.16);
-        gain.gain.setValueAtTime(sfxVolume * 0.6, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.3);
-    } else if (type === 'death') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.linearRampToValueAtTime(50, now + 0.6);
-        gain.gain.setValueAtTime(sfxVolume * 0.8, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-        osc.start(now);
-        osc.stop(now + 0.6);
-    } else if (type === 'shoot') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(900, now + 0.1);
-        gain.gain.setValueAtTime(sfxVolume * 0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    }
-}
-
-// Control Keys Configuration
-let controls = {
-    p1: {
-        left: 'KeyA',
-        right: 'KeyD',
-        up: 'KeyW',
-        down: 'KeyS',
-        jump: 'KeyW', // Also support double tap up or separate jump button
-        attackA: 'KeyJ',
-        attackB: 'KeyK',
-        shield: 'KeyL',
-        grab: 'KeyU'
-    },
-    p2: {
-        left: 'ArrowLeft',
-        right: 'ArrowRight',
-        up: 'ArrowUp',
-        down: 'ArrowDown',
-        jump: 'ArrowUp',
-        attackA: 'Numpad1',
-        attackB: 'Numpad2',
-        shield: 'Numpad3',
-        grab: 'Numpad0'
-    }
-};
-
-// Fallback keyboard alternative keys if Numpad doesn't exist
-const alternateP2Controls = {
-    left: 'ArrowLeft',
-    right: 'ArrowRight',
-    up: 'ArrowUp',
-    down: 'ArrowDown',
-    jump: 'ArrowUp',
-    attackA: 'KeyZ',
-    attackB: 'KeyX',
-    shield: 'KeyC',
-    grab: 'KeyV'
-};
-
-// Load settings if stored
-try {
-    const saved = localStorage.getItem('smashturbanda_settings');
-    if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.controls) controls = parsed.controls;
-        if (parsed.volume !== undefined) {
-            sfxVolume = parsed.volume === 0.7 ? 0.15 : parsed.volume;
-            document.getElementById('slider-sfx').value = sfxVolume;
-        }
-    }
-} catch (e) {
-    console.warn("Could not load controls settings", e);
-}
-
 // Character Templates
 const CHARACTERS = {
     balanceado: {
@@ -368,24 +223,7 @@ let gameMode = 'stocks'; // 'stocks' or 'time'
 let cpuDifficulty = 'medium'; // 'easy', 'medium', 'hard'
 let activeStage = 'battlefield';
 
-// Active keys state
-const keysPressed = {};
-
-window.addEventListener('keydown', (e) => {
-    keysPressed[e.code] = true;
-    initAudio(); // Initialize on user interaction
-});
-window.addEventListener('keyup', (e) => {
-    keysPressed[e.code] = false;
-});
-
 // Helper functions for hit detection
-function checkAABBCollision(rect1, rect2) {
-    return rect1.x < rect2.x + rect2.w &&
-        rect1.x + rect1.w > rect2.x &&
-        rect1.y < rect2.y + rect2.h &&
-        rect1.y + rect1.h > rect2.y;
-}
 
 function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offsetY) {
     let hitboxX;
@@ -474,6 +312,9 @@ function applyHit(attacker, victim, damage, knockback) {
 
     // Reset double jump so victim can try to recover
     victim.jumpsUsed = 1;
+
+    // Track attacker for kill credit
+    victim.lastHitBy = attacker.id;
 }
 
 // Particle effect on death / launch
@@ -592,6 +433,7 @@ class SmashGame {
                 hits: []
             });
             playSynthSound('heavy_hit');
+            playSoundFile('sound/puma.mp3');
         } else if (p.heldItem === 'yahu-strike') {
             this.bombers.push({
                 x: V_WIDTH + 150,
@@ -604,6 +446,7 @@ class SmashGame {
                 bombTargets: [1050, 900, 750, 600, 450, 300, 150]
             });
             playSynthSound('heavy_hit');
+            playSoundFile('sound/strike.mp3', 4000); // Limit strike sound to 5 seconds
         }
 
         p.heldItem = null; // consume item
@@ -653,7 +496,9 @@ class SmashGame {
                 lastControlState: {},
                 prevControlState: {},
                 onGroundSlam: false,
-                heldItem: null
+                heldItem: null,
+                comboCount: 0,
+                comboTimer: 0
             };
         });
 
@@ -673,6 +518,10 @@ class SmashGame {
 
         const toast = document.getElementById('toast');
         if (toast) toast.classList.add('hidden');
+
+        if (typeof stopMenuMusic === 'function') {
+            stopMenuMusic();
+        }
 
         document.getElementById('game-hud').classList.remove('hidden');
 
@@ -724,7 +573,7 @@ class SmashGame {
         const hudContainer = document.getElementById('game-hud');
         if (!hudContainer) return;
 
-        const colors = ['#60a5fa', '#f87171', '#fbbf24', '#34d399'];
+        const colors = ['#00ccff', '#ff0055', '#ffcc00', '#00ff00'];
 
         // Reconstruct only if player count changes or differs
         if (hudContainer.children.length !== this.players.length) {
@@ -763,7 +612,7 @@ class SmashGame {
                 const targetDamageText = `${Math.floor(p.damage)}%`;
                 if (damageSpan.textContent !== targetDamageText) {
                     damageSpan.textContent = targetDamageText;
-                    damageSpan.style.color = p.damage > 100 ? '#ef4444' : p.damage > 50 ? '#fbbf24' : '#ffffff';
+                    damageSpan.style.color = p.damage > 100 ? '#ff0055' : p.damage > 50 ? '#ffcc00' : '#ffffff';
                 }
             }
 
@@ -1019,12 +868,22 @@ class SmashGame {
     }
 
     updatePlayer(p) {
+        if (this.matchType === 'stocks' && p.stocks <= 0) {
+            p.x = -9999;
+            p.y = -9999;
+            p.vx = 0;
+            p.vy = 0;
+            p.respawning = false;
+            return;
+        }
+
         if (p.respawning) {
             p.respawnTimer--;
             if (p.respawnTimer <= 0) {
                 p.respawning = false;
                 const stageConfig = STAGES[activeStage];
-                const spawn = p.id === 'p1' ? stageConfig.spawn[0] : stageConfig.spawn[1];
+                const playerIdx = this.players.indexOf(p);
+                const spawn = stageConfig.spawn[playerIdx] || stageConfig.spawn[0];
                 p.x = spawn.x;
                 p.y = spawn.y;
                 p.vx = 0;
@@ -1039,6 +898,13 @@ class SmashGame {
         if (p.hitStun > 0) p.hitStun--;
         if (p.shieldStun > 0) p.shieldStun--;
         if (p.invulnerable > 0) p.invulnerable--;
+
+        if (p.comboTimer > 0) {
+            p.comboTimer--;
+            if (p.comboTimer <= 0) {
+                p.comboCount = 0;
+            }
+        }
 
         if (p.balanceadoCooldown === undefined) p.balanceadoCooldown = 0;
         if (p.balanceadoCharge === undefined) p.balanceadoCharge = 0;
@@ -1190,7 +1056,21 @@ class SmashGame {
                     } else if (keys.left || keys.right) {
                         triggerMeleeHitbox(p, 60, 40, 11, 12, 10, -5); // Smash Forward
                     } else {
-                        triggerMeleeHitbox(p, 45, 30, 6, 6, 10, -5);  // Neutral Jab
+                        // Neutral Combo attack (3-step combo)
+                        if (p.comboTimer > 0) {
+                            p.comboCount = (p.comboCount + 1) % 3;
+                        } else {
+                            p.comboCount = 0;
+                        }
+                        p.comboTimer = 40; // 40 frames window to continue the combo
+
+                        if (p.comboCount === 0) {
+                            triggerMeleeHitbox(p, 45, 30, 4, 3, 10, -5); // Hit 1: low dmg & low knockback
+                        } else if (p.comboCount === 1) {
+                            triggerMeleeHitbox(p, 45, 30, 4, 3, 10, -5); // Hit 2: low dmg & low knockback
+                        } else {
+                            triggerMeleeHitbox(p, 55, 35, 8, 12, 12, -5); // Hit 3: finisher, high dmg & high knockback
+                        }
                     }
                 } else if (keys.attackB && keys.up && !prevKeys.attackB) {
                     // Up Special (One-shot per airtime)
@@ -1397,11 +1277,15 @@ class SmashGame {
             }
 
             // Solid collision from top
+            // Expand threshold and bottom tolerance when downward moving platform moves faster than gravity to keep player glued
+            const verticalThreshold = (plat.moving && plat.speedY * plat.dirY > 0) ? (8 + plat.speedY * 2) : 8;
+            const bottomTolerance = (plat.moving && plat.speedY * plat.dirY > 0) ? (plat.speedY * 2) : 0;
+
             if (p.vy >= 0 &&
                 p.x + p.w * 0.2 < plat.x + plat.w &&
                 p.x + p.w * 0.8 > plat.x &&
-                p.y + p.h - p.vy <= plat.y + 8 &&
-                p.y + p.h >= plat.y) {
+                p.y + p.h - p.vy <= plat.y + verticalThreshold &&
+                p.y + p.h >= plat.y - bottomTolerance) {
 
                 p.y = plat.y - p.h;
                 p.vy = 0;
@@ -1430,15 +1314,33 @@ class SmashGame {
             return;
         }
 
-        const killer = this.players.find(pl => pl.id !== p.id);
-        if (killer) killer.score++;
+        let killer = null;
+        if (p.lastHitBy) {
+            killer = this.players.find(pl => pl.id === p.lastHitBy);
+        }
+        if (!killer) {
+            // Fallback to finding another player so score increments on self-destruction (or default behaviour)
+            killer = this.players.find(pl => pl.id !== p.id);
+        }
+        if (killer) {
+            killer.score++;
+        }
+        p.lastHitBy = null; // Clear attacker
 
         if (this.matchType === 'stocks') {
             p.stocks--;
             this.updateHUD();
             if (p.stocks <= 0) {
-                this.endMatch();
-                return;
+                p.x = -9999;
+                p.y = -9999;
+                p.vx = 0;
+                p.vy = 0;
+                p.respawning = false;
+                const alivePlayers = this.players.filter(pl => pl.stocks > 0);
+                if (alivePlayers.length <= 1) {
+                    this.endMatch();
+                }
+                return; // Early return to prevent respawning
             }
         } else {
             this.updateHUD();
@@ -1588,6 +1490,10 @@ class SmashGame {
                 winner: winner
             });
         }
+
+        if (typeof playMenuMusic === 'function') {
+            playMenuMusic();
+        }
     }
 
     render() {
@@ -1690,36 +1596,204 @@ class SmashGame {
                 this.ctx.translate(-cx, -cy);
             }
 
-            // Draw character model
+            // --- ANIMATION PROCEDURAL ---
+            const now = Date.now();
+            const walkTime = now * 0.012;
+            const idleTime = now * 0.004;
+            const flapTime = now * 0.025;
+
+            // Squash & Stretch
+            let scaleX = 1;
+            let scaleY = 1;
+
+            if (!p.isGrounded) {
+                // Stretch in direction of vertical velocity
+                scaleY = 1 + Math.min(0.2, Math.abs(p.vy) / 40);
+                scaleX = 1 - Math.min(0.1, Math.abs(p.vy) / 80);
+            } else if (Math.abs(p.vx) > 0.1) {
+                // Walk squash & tilt
+                scaleY = 1 - Math.abs(Math.sin(walkTime * 1.5)) * 0.05;
+                scaleX = 1 + Math.abs(Math.sin(walkTime * 1.5)) * 0.02;
+            } else {
+                // Idle breathing
+                scaleY = 1 + Math.sin(idleTime) * 0.02;
+                scaleX = 1 - Math.sin(idleTime) * 0.01;
+            }
+
+            // Translate to feet center for scaling
+            this.ctx.translate(p.x + p.w / 2, p.y + p.h);
+            this.ctx.scale(scaleX, scaleY);
+
+            // Draw shadow on ground if close
+            if (p.isGrounded) {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, 0, p.w * 0.5, 4, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            // Draw Legs
+            this.ctx.strokeStyle = p.facing === 1 ? p.charData.colorAlt : p.charData.color;
+            this.ctx.lineWidth = 6;
+            this.ctx.lineCap = 'round';
+
+            let leftLegAngle = 0.2;
+            let rightLegAngle = -0.2;
+
+            if (p.isGrounded && Math.abs(p.vx) > 0.1) {
+                const swing = Math.sin(walkTime * Math.abs(p.vx) * 0.2);
+                leftLegAngle = swing * 0.6;
+                rightLegAngle = -swing * 0.6;
+            } else if (!p.isGrounded) {
+                leftLegAngle = 0.4 + Math.sin(flapTime) * 0.1;
+                rightLegAngle = -0.4 - Math.sin(flapTime) * 0.1;
+            }
+
+            // Left leg
+            this.ctx.save();
+            this.ctx.translate(-p.w / 4, -4);
+            this.ctx.rotate(leftLegAngle);
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, 0);
+            this.ctx.lineTo(0, 10);
+            this.ctx.stroke();
+            this.ctx.restore();
+
+            // Right leg
+            this.ctx.save();
+            this.ctx.translate(p.w / 4, -4);
+            this.ctx.rotate(rightLegAngle);
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, 0);
+            this.ctx.lineTo(0, 10);
+            this.ctx.stroke();
+            this.ctx.restore();
+
+            // Wings for Volador class
+            if (p.charData.name === "Volador") {
+                this.ctx.fillStyle = '#f472b6'; // Pastel pink wings
+                const wingSwing = Math.sin(flapTime) * 0.4;
+
+                // Left Wing
+                this.ctx.save();
+                this.ctx.translate(-p.w / 2, -p.h * 0.6);
+                this.ctx.rotate(-0.5 + wingSwing);
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, 0, 20, 8, -Math.PI / 6, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+
+                // Right Wing
+                this.ctx.save();
+                this.ctx.translate(p.w / 2, -p.h * 0.6);
+                this.ctx.rotate(0.5 - wingSwing);
+                this.ctx.beginPath();
+                this.ctx.ellipse(0, 0, 20, 8, Math.PI / 6, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
+
+            // Draw Body
             const bodyColor = p.facing === 1 ? p.charData.color : p.charData.colorAlt;
             this.ctx.fillStyle = bodyColor;
-
-            // Draw rounded body
             this.ctx.beginPath();
-            this.ctx.roundRect(p.x, p.y, p.w, p.h, [8]);
+            this.ctx.roundRect(-p.w / 2, -p.h, p.w, p.h, [8]);
             this.ctx.fill();
 
-            // Check if player has selected a custom head image
+            // Visor / Custom Head
             const headImg = headImages[p.name];
             if (headImg && headImg.complete) {
-                // Draw custom head image on top of shoulders
                 const headSize = 44;
                 this.ctx.save();
-                // Center of the head placed at the upper portion of the rounded rectangle body
-                this.ctx.translate(p.x + p.w / 2, p.y + 12);
+                this.ctx.translate(0, -p.h + 12);
                 if (p.facing === -1) {
                     this.ctx.scale(-1, 1);
                 }
                 this.ctx.drawImage(headImg, -headSize / 2, -headSize / 2, headSize, headSize);
                 this.ctx.restore();
             } else {
-                // Draw face visor (pointing direction)
                 this.ctx.fillStyle = '#0f172a';
-                const visorW = 10;
+                const visorW = 12;
                 const visorH = 8;
-                const visorX = p.facing === 1 ? p.x + p.w - 12 : p.x + 2;
-                this.ctx.fillRect(visorX, p.y + 10, visorW, visorH);
+                const visorX = p.facing === 1 ? p.w / 2 - 14 : -p.w / 2 + 2;
+                this.ctx.beginPath();
+                this.ctx.roundRect(visorX, -p.h + 10, visorW, visorH, [2]);
+                this.ctx.fill();
             }
+
+            // Weapon / Accessory rendering
+            this.ctx.save();
+            this.ctx.translate(p.facing * (p.w / 3), -p.h * 0.5);
+            this.ctx.scale(p.facing, 1);
+
+            // Weapon swing animation on attack/shieldStun (swing in scaled local coords)
+            let attackAngle = 0;
+            if (p.shieldStun > 0) {
+                attackAngle = Math.sin((p.shieldStun / 15) * Math.PI) * 1.5;
+            }
+            this.ctx.rotate(attackAngle);
+
+            if (p.charData.name === "Balanceado") {
+                // Draw Sword
+                this.ctx.strokeStyle = '#eab308'; // Golden blade
+                this.ctx.lineWidth = 4;
+                this.ctx.lineCap = 'square';
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(24, -12);
+                this.ctx.stroke();
+
+                // Sword Hilt
+                this.ctx.strokeStyle = '#a1a1aa';
+                this.ctx.lineWidth = 6;
+                this.ctx.beginPath();
+                this.ctx.moveTo(4, 0);
+                this.ctx.lineTo(4, -6);
+                this.ctx.stroke();
+            } else if (p.charData.name === "Veloz") {
+                // Neon energy daggers
+                this.ctx.strokeStyle = '#22c55e'; // Neon Green
+                this.ctx.lineWidth = 3;
+                this.ctx.shadowBlur = 10;
+                this.ctx.shadowColor = '#22c55e';
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(16, 4);
+                this.ctx.stroke();
+                this.ctx.shadowBlur = 0; // Reset
+            } else if (p.charData.name === "Pesado") {
+                // Giant combat mallet/hammer
+                this.ctx.strokeStyle = '#78716c'; // Stone shaft
+                this.ctx.lineWidth = 5;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 8);
+                this.ctx.lineTo(16, -16);
+                this.ctx.stroke();
+
+                // Hammer Head
+                this.ctx.fillStyle = '#3f3f46';
+                this.ctx.fillRect(12 - 6, -26, 12, 20);
+            } else if (p.charData.name === "Zoner" || p.charData.name === "Cazador") {
+                // Laser bow
+                this.ctx.strokeStyle = '#3b82f6';
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.arc(8, -4, 12, -Math.PI / 2, Math.PI / 2);
+                this.ctx.stroke();
+            }
+            this.ctx.restore();
+
+            // Draw active items in hand
+            if (p.heldItem) {
+                const itemImg = itemImages[p.heldItem];
+                if (itemImg && itemImg.complete) {
+                    this.ctx.drawImage(itemImg, -12, -p.h - 28, 24, 24);
+                }
+            }
+
+            // Restore scale/translation per player
+            this.ctx.restore();
+            this.ctx.save();
 
             // Draw shield bubble
             if (p.shieldActive) {
@@ -1738,10 +1812,6 @@ class SmashGame {
                 this.ctx.strokeStyle = '#ef4444';
                 this.ctx.lineWidth = 3;
                 this.ctx.strokeRect(p.x - 4, p.y - 4, p.w + 8, p.h + 8);
-            } else if (p.shieldStun > 0) {
-                this.ctx.strokeStyle = '#fbbf24';
-                this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(p.x - 2, p.y - 2, p.w + 4, p.h + 4);
             }
 
             // Draw charging effect for Balanceado
@@ -1783,13 +1853,7 @@ class SmashGame {
                 this.ctx.fillRect(p.x - p.facing * 30, p.y, p.w, p.h);
             }
 
-            // Draw held item above player
-            if (p.heldItem) {
-                const itemImg = itemImages[p.heldItem];
-                if (itemImg && itemImg.complete) {
-                    this.ctx.drawImage(itemImg, p.x + p.w / 2 - 12, p.y - 28, 24, 24);
-                }
-            }
+
 
             this.ctx.restore();
         });
