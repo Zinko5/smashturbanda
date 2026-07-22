@@ -1,9 +1,9 @@
 #import "plantilla.typ": afiche-parche, seccion
 
 #show: doc => afiche-parche(
-  version: "26.7.2",
+  parche: "26.7.2",
   fecha: "17 de Julio, 2026",
-  doc
+  doc,
 )
 
 #seccion("🔥 NUEVAS CARACTERÍSTICAS Y AJUSTES DE BALANCE")

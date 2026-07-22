@@ -709,7 +709,7 @@ input[type="text"]:focus {
     border: 1.5px solid var(--border-color);
     border-radius: 8px;
     padding: 8px 14px;
-    z-index: 200; /* Overlay / floating level */
+    z-index: 999; /* Overlay / floating level */
     transform: skewX(-6deg);
     transition: all 0.3s var(--physics-ease);
 }
@@ -816,3 +816,143 @@ input[type="text"]:focus {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent);
 }
+
+/* Lobby player slots and badges styling */
+.player-slot-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.player-slot-name {
+    font-weight: bold;
+    color: var(--text-primary);
+}
+.player-slot-char {
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+.player-slot-team {
+    font-size: 0.85rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+.team-1-badge { background: #3b82f6; color: #fff; }
+.team-2-badge { background: #ef4444; color: #fff; }
+.team-3-badge { background: #10b981; color: #fff; }
+.team-4-badge { background: #eab308; color: #000; }
+
+.status-badge {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+.status-ready { background: #22c55e; color: #fff; }
+.status-not-ready { background: #ef4444; color: #fff; }
+
+/* Redesign of Character Select (CSS) for Sidebar layout */
+.menu-css-container {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    width: 98%;
+    max-width: 1350px;
+    max-height: 95vh;
+    background: rgba(26, 15, 31, 0.95);
+    border: 1.5px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-sizing: border-box;
+    box-shadow: var(--shadow-neon);
+}
+
+.menu-css-main {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.menu-css-sidebar {
+    background: rgba(0, 0, 0, 0.25);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    padding-left: 16px;
+    padding-right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Responsive grid for character and name grids */
+.char-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 12px;
+    padding: 6px 12px;
+    margin: 10px 0;
+}
+
+.name-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    padding: 6px 12px;
+    margin: 10px 0;
+}
+
+/* Stage voting styling */
+.stage-vote-card {
+    transition: all 0.25s var(--physics-ease);
+}
+.stage-vote-card:hover {
+    border-color: var(--accent) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    transform: translateY(-3px);
+}
+.stage-vote-card.selected {
+    border-color: var(--energy-green) !important;
+    background: rgba(34, 197, 94, 0.15) !important;
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
+}
+
+/* Roulette animation flash effect */
+.roulette-flash {
+    border-color: var(--accent) !important;
+    background: rgba(245, 158, 11, 0.25) !important;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.5) !important;
+}
+
+/* Premium styled select dropdowns */
+select {
+    background: rgba(26, 15, 31, 0.95) !important;
+    color: #f8fafc !important;
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 0.9rem !important;
+    cursor: pointer !important;
+    outline: none !important;
+    transition: border-color 0.2s var(--physics-ease), box-shadow 0.2s var(--physics-ease) !important;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 12px center !important;
+    background-size: 16px !important;
+    padding-right: 36px !important;
+}
+
+select:hover, select:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.3) !important;
+}
+

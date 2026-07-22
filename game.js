@@ -22,18 +22,40 @@ const itemImages = {
 itemImages['puma'].src = 'img/activable-puma.png';
 itemImages['yahu-strike'].src = 'img/yahu-strike.png';
 
-// Character Templates
-const CHARACTERS = {
+// Phenotype Configurations
+const PHENOTYPES = {
     balanceado: {
-        name: "Balanceado",
-        color: "#60a5fa", // Blue
-        colorAlt: "#3b82f6",
-        width: 32,
-        height: 48,
         weight: 100,
         speed: 6.0,
         jumpForce: 13.5,
         doubleJumpForce: 12.0,
+        baseDamage: 1.0
+    },
+    ligero: {
+        weight: 75,
+        speed: 8.0,
+        jumpForce: 15.5,
+        doubleJumpForce: 14.5,
+        baseDamage: 0.85
+    },
+    pesado: {
+        weight: 140,
+        speed: 4.2,
+        jumpForce: 11.5,
+        doubleJumpForce: 10.0,
+        baseDamage: 1.2
+    }
+};
+
+// Character Templates
+const CHARACTERS = {
+    balanceado: {
+        name: "Mago",
+        phenotype: "balanceado",
+        color: "#60a5fa", // Blue
+        colorAlt: "#3b82f6",
+        width: 32,
+        height: 48,
         specials: {
             neutral: (p) => { // Projectile
                 shootProjectile(p, 'fireball', p.facing * 10, 0, 15, 6);
@@ -47,15 +69,12 @@ const CHARACTERS = {
         }
     },
     veloz: {
-        name: "Veloz",
+        name: "Sonic",
+        phenotype: "ligero",
         color: "#fbbf24", // Yellow
         colorAlt: "#f59e0b",
         width: 28,
         height: 44,
-        weight: 75,
-        speed: 8.0,
-        jumpForce: 15.5,
-        doubleJumpForce: 14.5,
         specials: {
             neutral: (p) => { // Instant Dash Attack
                 p.vx = p.facing * 18;
@@ -64,8 +83,8 @@ const CHARACTERS = {
                 // Create hit box active immediately
                 triggerMeleeHitbox(p, 40, 30, 12, 15, p.facing * 8, -5);
             },
-            up: (p) => { // Rocket Jump
-                p.vy = -19;
+            up: (p) => { // Rocket Jump (Reduced launch height to prevent dying off top screen)
+                p.vy = -14;
                 p.vx = 0;
                 p.shieldStun = 15;
                 playSynthSound('jump');
@@ -73,21 +92,20 @@ const CHARACTERS = {
         }
     },
     pesado: {
-        name: "Pesado",
+        name: "Gordo",
+        phenotype: "pesado",
         color: "#f87171", // Red
         colorAlt: "#ef4444",
         width: 42,
         height: 60,
-        weight: 140,
-        speed: 4.2,
-        jumpForce: 11.5,
-        doubleJumpForce: 10.0,
         specials: {
-            neutral: (p) => { // Ground Slam
+            neutral: (p, chargeProgress = 0) => { // Ground Slam
                 p.vy = 16;
                 p.shieldStun = 25;
                 // Big hit frame on land
                 p.onGroundSlam = true;
+                p.gordoSlamStartY = p.y;
+                p.gordoSlamCharge = chargeProgress;
             },
             up: (p) => { // Spinning Slash
                 p.vy = -13;
@@ -107,14 +125,11 @@ const CHARACTERS = {
     },
     zoner: {
         name: "Zoner",
+        phenotype: "balanceado",
         color: "#34d399", // Green
         colorAlt: "#10b981",
         width: 30,
         height: 48,
-        weight: 90,
-        speed: 5.0,
-        jumpForce: 12.5,
-        doubleJumpForce: 11.0,
         specials: {
             neutral: (p) => { // Arrow Shoot
                 const keys = p.lastControlState || {};
@@ -139,21 +154,19 @@ const CHARACTERS = {
                 }
                 shootProjectile(p, 'arrow', vx, vy, 10, 8);
             },
-            up: (p) => {
-                p.charData.specials.neutral(p);
+            up: (p) => { // Default small jump recovery instead of arrow shoot
+                p.vy = -12;
+                playSynthSound('jump');
             }
         }
     },
     volador: {
-        name: "Volador",
+        name: "Palomo",
+        phenotype: "ligero",
         color: "#c084fc", // Purple/Violet
         colorAlt: "#a855f7",
         width: 30,
         height: 46,
-        weight: 80,
-        speed: 5.5,
-        jumpForce: 13.0,
-        doubleJumpForce: 11.5,
         specials: {
             neutral: (p) => {
                 if (p.isGrounded) {
@@ -176,6 +189,19 @@ const CHARACTERS = {
         }
     }
 };
+
+// Resolve character attributes based on phenotypes
+Object.keys(CHARACTERS).forEach(key => {
+    const char = CHARACTERS[key];
+    const pheno = PHENOTYPES[char.phenotype];
+    if (pheno) {
+        char.weight = pheno.weight;
+        char.speed = pheno.speed;
+        char.jumpForce = pheno.jumpForce;
+        char.doubleJumpForce = pheno.doubleJumpForce;
+        char.baseDamage = pheno.baseDamage;
+    }
+});
 
 // Stage Configurations
 const STAGES = {
@@ -248,10 +274,11 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
     // Find potential targets (all other players)
     gameEngine.players.forEach(opponent => {
         if (opponent.id === attacker.id || opponent.respawning || opponent.invulnerable > 0) return;
+        if (gameEngine.teamsEnabled && opponent.team && attacker.team && opponent.team === attacker.team) return;
 
         const opponentRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
         if (checkAABBCollision(hitbox, opponentRect)) {
-            applyHit(attacker, opponent, damage, baseKnockback);
+            applyHit(attacker, opponent, damage);
         }
     });
 }
@@ -259,7 +286,7 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
 function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW, customH) {
     playSynthSound('shoot');
     let startX = attacker.x + (attacker.facing === 1 ? attacker.w + 10 : -20);
-    let startY = attacker.y + attacker.h / 3;
+    let startY = attacker.y + attacker.h / 2 - (customH || (type === 'fireball' ? 18 : 6)) / 2;
     if (type === 'bomb') {
         startX = attacker.x + attacker.w / 2 - (customW || 16) / 2;
         startY = attacker.y + attacker.h;
@@ -280,7 +307,7 @@ function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW,
     gameEngine.projectiles.push(proj);
 }
 
-function applyHit(attacker, victim, damage, knockback) {
+function applyHit(attacker, victim, damage, explosionSource = null) {
     if (victim.shieldActive && victim.shieldStrength > 10) {
         // Shield absorbs hit
         victim.shieldStrength -= damage * 1.5;
@@ -293,17 +320,35 @@ function applyHit(attacker, victim, damage, knockback) {
         return;
     }
 
-    playSynthSound(knockback > 10 ? 'heavy_hit' : 'hit');
-    const scaledDamage = damage * 0.65;
-    victim.damage += scaledDamage;
+    // Apply phenotype baseDamage scaling from the attacker
+    let finalDamage = damage;
+    if (attacker && attacker.charData && attacker.charData.baseDamage !== undefined) {
+        finalDamage = Math.round(damage * attacker.charData.baseDamage);
+    }
 
-    // Calculate knockback scaling (gentler progression)
-    const scale = (victim.damage / 100) * 0.75 + 0.65;
-    // Factor in player weight (Pesado takes less, Veloz takes more)
-    const kbForce = (knockback * scale) * (100 / victim.charData.weight);
+    playSynthSound(finalDamage > 12 ? 'heavy_hit' : 'hit');
+    victim.damage += finalDamage;
 
-    // Knockback angle
-    const angle = attacker.x < victim.x ? -Math.PI / 6 : -5 * Math.PI / 6;
+    // Fixed proportion relationship: base knockback is 0.8x of final damage
+    const baseKnockback = finalDamage * 0.8;
+    // Damage percentages only act as multipliers of that damage/knockback
+    const multiplier = 1 + (victim.damage / 100);
+    const kbForce = (baseKnockback * multiplier) * (100 / victim.charData.weight);
+
+    // Knockback angle: radial direction if explosionSource is provided, otherwise standard direction
+    let angle;
+    if (explosionSource) {
+        const victimCenterX = victim.x + victim.w / 2;
+        const victimCenterY = victim.y + victim.h / 2;
+        let diffY = victimCenterY - explosionSource.y;
+        if (diffY > 0) {
+            diffY = -diffY; // Always launch upwards/outwards from explosions
+        }
+        angle = Math.atan2(diffY, victimCenterX - explosionSource.x);
+    } else {
+        angle = attacker.x < victim.x ? -Math.PI / 6 : -5 * Math.PI / 6;
+    }
+
     victim.vx = Math.cos(angle) * kbForce * 0.9;
     victim.vy = Math.sin(angle) * kbForce * 0.8;
 
@@ -370,16 +415,17 @@ class SmashGame {
         this.scale = Math.min(scaleX, scaleY);
     }
 
-    triggerExplosion(x, y, attackerId, customDamage = 14, customKnockback = 12) {
+    triggerExplosion(x, y, attackerId, radius = 110) {
         playSynthSound('explosion');
-        // Spawn explosion particles
-        for (let i = 0; i < 15; i++) {
+        // Spawn explosion particles based on size
+        const numParticles = Math.round(15 * (radius / 110));
+        for (let i = 0; i < numParticles; i++) {
             this.particles.push({
                 x: x,
                 y: y,
                 vx: (Math.random() - 0.5) * 8,
                 vy: (Math.random() - 0.5) * 8,
-                radius: Math.random() * 8 + 4,
+                radius: (Math.random() * 8 + 4) * (radius / 110),
                 color: '#f59e0b',
                 alpha: 1.0,
                 life: Math.round(Math.random() * 20 + 20) // 20 to 40 frames
@@ -387,15 +433,30 @@ class SmashGame {
         }
 
         // Explosion hitbox: check a range around (x, y)
-        const radius = 110; // explosion radius
         const explosionRect = { x: x - radius, y: y - radius, w: radius * 2, h: radius * 2 };
         const attacker = this.players.find(pl => pl.id === attackerId);
 
+        // Core damage is derived from radius
+        const coreDamage = Math.round(1.4 * Math.sqrt(radius));
+
         this.players.forEach(opponent => {
             if (opponent.id === attackerId || opponent.respawning || opponent.invulnerable > 0) return;
+            if (this.teamsEnabled && opponent.team && attacker && attacker.team && opponent.team === attacker.team) return;
+
             const oppRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
             if (checkAABBCollision(explosionRect, oppRect)) {
-                applyHit(attacker, opponent, customDamage, customKnockback);
+                const oppCenterX = opponent.x + opponent.w / 2;
+                const oppCenterY = opponent.y + opponent.h / 2;
+                const dx = oppCenterX - x;
+                const dy = oppCenterY - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= radius) {
+                    const proximityFactor = 1 - (distance / radius);
+                    const finalDamage = Math.round(coreDamage * proximityFactor);
+                    if (finalDamage > 0) {
+                        applyHit(attacker || { id: attackerId, x: x }, opponent, finalDamage, { x, y });
+                    }
+                }
             }
         });
     }
@@ -433,7 +494,7 @@ class SmashGame {
                 hits: []
             });
             playSynthSound('heavy_hit');
-            playSoundFile('sound/puma.mp3');
+            playSoundFile('sound/efectos/puma.mp3');
         } else if (p.heldItem === 'yahu-strike') {
             this.bombers.push({
                 x: V_WIDTH + 150,
@@ -446,19 +507,20 @@ class SmashGame {
                 bombTargets: [1050, 900, 750, 600, 450, 300, 150]
             });
             playSynthSound('heavy_hit');
-            playSoundFile('sound/strike.mp3', 4000); // Limit strike sound to 5 seconds
+            playSoundFile('sound/efectos/strike.mp3', 4000); // Limit strike sound to 5 seconds
         }
 
         p.heldItem = null; // consume item
     }
 
-    setupMatch(mode, playersConfig, stageKey, matchType, stocksLimit = 3, timeLimitMinutes = 2, difficulty = 'medium') {
+    setupMatch(mode, playersConfig, stageKey, matchType, stocksLimit = 3, timeLimitMinutes = 2, difficulty = 'medium', teamsEnabled = false) {
         this.mode = mode;
         this.matchType = matchType;
         this.stocksLimit = stocksLimit;
         activeStage = stageKey;
         cpuDifficulty = difficulty;
         this.gameWinner = null;
+        this.teamsEnabled = teamsEnabled;
 
         this.timeRemaining = timeLimitMinutes * 60 * 60; // time in frames (60fps * 60secs * minutes)
 
@@ -473,6 +535,7 @@ class SmashGame {
             return {
                 id: pConfig.id,
                 name: pConfig.name,
+                team: pConfig.team || null,
                 x: spawn.x,
                 y: spawn.y,
                 vx: 0,
@@ -498,7 +561,9 @@ class SmashGame {
                 onGroundSlam: false,
                 heldItem: null,
                 comboCount: 0,
-                comboTimer: 0
+                comboTimer: 0,
+                jumpBuffered: false,
+                jumpBufferTimer: 0
             };
         });
 
@@ -764,10 +829,12 @@ class SmashGame {
             // Check collision with other players
             this.players.forEach(opponent => {
                 if (opponent.id === puma.attackerId || opponent.respawning || opponent.invulnerable > 0) return;
+                const attackerPlayer = this.players.find(pl => pl.id === puma.attackerId);
+                if (this.teamsEnabled && attackerPlayer && opponent.team && attackerPlayer.team && opponent.team === attackerPlayer.team) return;
 
                 const oppRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
                 if (checkAABBCollision(puma, oppRect) && !puma.hits.includes(opponent.id)) {
-                    applyHit(this.players.find(pl => pl.id === puma.attackerId), opponent, puma.damage, puma.knockback);
+                    applyHit(attackerPlayer, opponent, puma.damage);
                     puma.hits.push(opponent.id);
                     playSynthSound('heavy_hit');
                 }
@@ -790,7 +857,7 @@ class SmashGame {
                 if (b.x <= nextTargetX) {
                     const attacker = this.players.find(pl => pl.id === b.attackerId);
                     if (attacker) {
-                        shootProjectile(attacker, 'bomb', 0, 8, 25, 16, 75, 75);
+                        shootProjectile(attacker, 'bomb', 0, 8, 25, 16, 45, 45);
                         const lastProj = this.projectiles[this.projectiles.length - 1];
                         if (lastProj) {
                             lastProj.x = b.x + b.w / 2 - lastProj.w / 2;
@@ -817,11 +884,12 @@ class SmashGame {
             // Check collision with stage/screen bounds or oponent
             let active = pr.life > 0 && pr.x > 0 && pr.x < V_WIDTH && pr.y > 0 && pr.y < V_HEIGHT;
 
-            if (active && pr.type === 'bomb') {
+            if (active && (pr.type === 'bomb' || pr.type === 'fireball')) {
                 for (let plat of this.platforms) {
                     const platRect = { x: plat.x, y: plat.y, w: plat.w, h: plat.h };
                     if (checkAABBCollision(pr, platRect)) {
-                        this.triggerExplosion(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.attackerId, pr.damage, pr.knockback);
+                        const radius = Math.round(pr.w * 4.2);
+                        this.triggerExplosion(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.attackerId, radius);
                         active = false;
                         break;
                     }
@@ -832,12 +900,16 @@ class SmashGame {
                 // Collide with any opponent
                 for (let pl of this.players) {
                     if (pl.id !== pr.attackerId && !pl.respawning && pl.invulnerable <= 0) {
+                        const attackerPlayer = this.players.find(p => p.id === pr.attackerId);
+                        if (this.teamsEnabled && attackerPlayer && pl.team && attackerPlayer.team && pl.team === attackerPlayer.team) continue;
+
                         const victimRect = { x: pl.x, y: pl.y, w: pl.w, h: pl.h };
                         if (checkAABBCollision(pr, victimRect)) {
-                            if (pr.type === 'bomb') {
-                                this.triggerExplosion(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.attackerId, pr.damage, pr.knockback);
+                            if (pr.type === 'bomb' || pr.type === 'fireball') {
+                                const radius = Math.round(pr.w * 4.2);
+                                this.triggerExplosion(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.attackerId, radius);
                             } else {
-                                applyHit(this.players.find(attacker => attacker.id === pr.attackerId), pl, pr.damage, pr.knockback);
+                                applyHit(attackerPlayer, pl, pr.damage);
                             }
                             active = false;
                             break;
@@ -908,6 +980,9 @@ class SmashGame {
 
         if (p.balanceadoCooldown === undefined) p.balanceadoCooldown = 0;
         if (p.balanceadoCharge === undefined) p.balanceadoCharge = 0;
+        if (p.gordoCooldown === undefined) p.gordoCooldown = 0;
+        if (p.gordoCharge === undefined) p.gordoCharge = 0;
+        if (p.voladorCharge === undefined) p.voladorCharge = 0;
         if (p.zonerShots === undefined) p.zonerShots = 2;
         if (p.zonerRechargeTimer === undefined) p.zonerRechargeTimer = 0;
 
@@ -917,10 +992,12 @@ class SmashGame {
         if (p.velozDashHits === undefined) p.velozDashHits = [];
 
         if (p.balanceadoCooldown > 0) p.balanceadoCooldown--;
+        if (p.gordoCooldown > 0) p.gordoCooldown--;
         if (p.zonerRechargeTimer > 0) {
             p.zonerRechargeTimer--;
             if (p.zonerRechargeTimer === 0) {
-                p.zonerShots = 2;
+                const ctrlKeys = p.lastControlState || {};
+                p.zonerShots = ctrlKeys.up ? 4 : 2;
             }
         }
 
@@ -934,25 +1011,34 @@ class SmashGame {
             p.upSpecialUsed = false;
             p.velozDashUsed = false;
             p.voladorFlying = false;
-        } else if (p.charData.name === "Volador") {
+        } else if (p.charData.name === "Palomo") {
             p.voladorFlying = true;
         }
 
         if (p.velozDashTimer > 0) {
             p.velozDashTimer--;
             p.vx = (p.velozDashDirX !== undefined ? p.velozDashDirX : p.facing) * p.velozDashSpeed;
-            p.vy = (p.velozDashDirY !== undefined ? p.velozDashDirY : 0) * p.velozDashSpeed;
+            let dashVy = (p.velozDashDirY !== undefined ? p.velozDashDirY : 0) * p.velozDashSpeed;
+            if (dashVy < 0) {
+                dashVy *= 0.55; // Scale down upward vertical dash to prevent dying off top of screen
+            }
+            p.vy = dashVy;
 
             // Check collision with other players during dash
             this.players.forEach(opponent => {
                 if (opponent.id !== p.id && !opponent.respawning && opponent.invulnerable <= 0) {
+                    if (this.teamsEnabled && p.team === opponent.team) return;
                     const playerRect = { x: p.x, y: p.y, w: p.w, h: p.h };
                     const oppRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
                     if (checkAABBCollision(playerRect, oppRect) && !p.velozDashHits.includes(opponent.id)) {
                         const progress = (p.velozDashSpeed - 12) / 12; // 0 to 1
-                        const damage = Math.round(12 + progress * 10); // 12 to 22 damage
-                        const knockback = Math.round(12 + progress * 6); // 12 to 18 knockback
-                        applyHit(p, opponent, damage, knockback);
+                        const damage = Math.round(11 + progress * 9); // 11 to 20 damage (small nerf)
+                        
+                        if (p.velozDashSpeed > 12 && opponent.damage > 50) {
+                            playSoundFile('sound/efectos/fernan-embestida.mp3');
+                        }
+                        
+                        applyHit(p, opponent, damage);
                         p.velozDashHits.push(opponent.id);
                     }
                 }
@@ -1013,28 +1099,58 @@ class SmashGame {
                 }
 
                 // Horizontal Move
-                if (keys.left) {
-                    p.vx = Math.max(-p.charData.speed, p.vx - 0.8);
-                    p.facing = -1;
-                } else if (keys.right) {
-                    p.vx = Math.min(p.charData.speed, p.vx + 0.8);
-                    p.facing = 1;
-                } else {
-                    // Friction
+                let appliedFriction = false;
+                if (Math.abs(p.vx) > p.charData.speed) {
                     p.vx *= p.isGrounded ? 0.75 : 0.95;
+                    appliedFriction = true;
                 }
 
-                // Jump / Double Jump
+                if (keys.left) {
+                    if (!appliedFriction) {
+                        p.vx = Math.max(-p.charData.speed, p.vx - 0.8);
+                    } else if (p.vx > 0) {
+                        p.vx -= 0.8; // extra braking force
+                    }
+                    p.facing = -1;
+                } else if (keys.right) {
+                    if (!appliedFriction) {
+                        p.vx = Math.min(p.charData.speed, p.vx + 0.8);
+                    } else if (p.vx < 0) {
+                        p.vx += 0.8; // extra braking force
+                    }
+                    p.facing = 1;
+                } else {
+                    if (!appliedFriction) {
+                        p.vx *= p.isGrounded ? 0.75 : 0.95;
+                    }
+                }
+
+                // Jump / Double Jump (with action button priority input buffering)
                 if (keys.jump && !prevKeys.jump) {
-                    if (p.isGrounded) {
-                        p.vy = -p.charData.jumpForce;
-                        p.isGrounded = false;
-                        p.jumpsUsed = 1;
-                        playSynthSound('jump');
-                    } else if (p.jumpsUsed < 2) {
-                        p.vy = -p.charData.doubleJumpForce;
-                        p.jumpsUsed = 2;
-                        playSynthSound('jump');
+                    p.jumpBuffered = true;
+                    p.jumpBufferTimer = 5; // 5 frames (~83ms) window
+                }
+
+                if (p.jumpBuffered) {
+                    // Action button check to suppress jump
+                    if (keys.attackA || keys.attackB) {
+                        p.jumpBuffered = false;
+                        p.jumpBufferTimer = 0;
+                    } else {
+                        p.jumpBufferTimer--;
+                        if (p.jumpBufferTimer <= 0) {
+                            p.jumpBuffered = false;
+                            if (p.isGrounded) {
+                                p.vy = -p.charData.jumpForce;
+                                p.isGrounded = false;
+                                p.jumpsUsed = 1;
+                                playSynthSound('jump');
+                            } else if (p.jumpsUsed < 2) {
+                                p.vy = -p.charData.doubleJumpForce;
+                                p.jumpsUsed = 2;
+                                playSynthSound('jump');
+                            }
+                        }
                     }
                 }
 
@@ -1072,8 +1188,11 @@ class SmashGame {
                             triggerMeleeHitbox(p, 55, 35, 8, 12, 12, -5); // Hit 3: finisher, high dmg & high knockback
                         }
                     }
-                } else if (keys.attackB && keys.up && !prevKeys.attackB) {
+                } else if (keys.attackB && keys.up && !p.isGrounded && (!prevKeys.attackB || ((p.balanceadoCharge && p.balanceadoCharge > 0) || (p.velozCharge && p.velozCharge > 0)))) {
                     // Up Special (One-shot per airtime)
+                    if (p.balanceadoCharge) p.balanceadoCharge = 0;
+                    if (p.velozCharge) p.velozCharge = 0;
+                    
                     if (!p.isGrounded && p.upSpecialUsed) {
                         // Already used in the air, do nothing
                     } else {
@@ -1084,20 +1203,20 @@ class SmashGame {
                     }
                 } else {
                     // Neutral Special (or charging / zoner cooldown handling)
-                    if (p.charData.name === "Balanceado") {
+                    if (p.charData.name === "Mago") {
                         if (p.balanceadoCooldown <= 0) {
-                            if (keys.attackB && !keys.up) {
+                            if (keys.attackB && (!keys.up || p.isGrounded)) {
                                 p.balanceadoCharge++;
                                 p.vx = 0; // Stall horizontal movement
                                 if (p.vy > 0) p.vy = 0.5; // Slow fall during charging
 
-                                if (p.balanceadoCharge >= 60) {
-                                    // Auto fire at max charge (1 second)
+                                if (p.balanceadoCharge >= 90) {
+                                    // Auto fire at max charge (1.5 seconds)
                                     const progress = 1;
-                                    const damage = Math.round(15 + progress * 15);
+                                    const damage = Math.round(8 + progress * 10);
                                     const knockback = Math.round(6 + progress * 6);
                                     const baseSpeed = 10 + progress * 3;
-                                    const size = Math.round(18 + progress * 18);
+                                    const size = Math.round(18 + progress * 24);
 
                                     let vx = p.facing * baseSpeed;
                                     let vy = 0;
@@ -1125,11 +1244,11 @@ class SmashGame {
                                 }
                             } else if (p.balanceadoCharge > 0) {
                                 // Released attackB
-                                const progress = Math.min(1, p.balanceadoCharge / 60);
-                                const damage = Math.round(15 + progress * 15);
+                                const progress = Math.min(1, p.balanceadoCharge / 90);
+                                const damage = Math.round(8 + progress * 10);
                                 const knockback = Math.round(6 + progress * 6);
                                 const baseSpeed = 10 + progress * 3;
-                                const size = Math.round(18 + progress * 18);
+                                const size = Math.round(18 + progress * 24);
 
                                 let vx = p.facing * baseSpeed;
                                 let vy = 0;
@@ -1156,21 +1275,46 @@ class SmashGame {
                                 p.balanceadoCharge = 0;
                             }
                         }
-                    } else if (p.charData.name === "Volador") {
-                        if (keys.attackB && !prevKeys.attackB && !keys.up) {
-                            p.charData.specials.neutral(p);
+                    } else if (p.charData.name === "Palomo") {
+                        if (p.isGrounded) {
+                            if (keys.attackB && !prevKeys.attackB && (!keys.up || p.isGrounded)) {
+                                p.charData.specials.neutral(p);
+                            }
+                        } else if (p.voladorFlying) {
+                            if (p.voladorBombCooldown <= 0) {
+                                if (keys.attackB) {
+                                    p.voladorCharge++;
+
+                                    if (p.voladorCharge >= 45) {
+                                        const progress = 1.0;
+                                        const dmg = Math.round(12 + progress * 10);
+                                        const size = Math.round(16 + progress * 24);
+                                        shootProjectile(p, 'bomb', 0, 10, dmg, 10, size, size);
+                                        p.voladorBombCooldown = 30;
+                                        p.voladorCharge = 0;
+                                    }
+                                } else if (p.voladorCharge > 0) {
+                                    const progress = Math.min(1.0, p.voladorCharge / 45);
+                                    const dmg = Math.round(12 + progress * 10);
+                                    const size = Math.round(16 + progress * 24);
+                                    shootProjectile(p, 'bomb', 0, 10, dmg, 10, size, size);
+                                    p.voladorBombCooldown = Math.round(16 + progress * 14);
+                                    p.voladorCharge = 0;
+                                }
+                            }
                         }
                     } else if (p.charData.name === "Zoner") {
-                        if (keys.attackB && !prevKeys.attackB && !keys.up) {
-                            if (p.zonerShots > 0) {
+                        if (keys.attackB && !prevKeys.attackB && (!keys.up || p.isGrounded || p.upSpecialUsed)) {
+                            const minShotVal = keys.up ? -2 : 0;
+                            if (p.zonerShots > minShotVal) {
                                 p.charData.specials.neutral(p);
                                 p.zonerShots--;
                                 p.zonerRechargeTimer = 40; // Reset recharge timer to 0.67s
                             }
                         }
-                    } else if (p.charData.name === "Veloz") {
+                    } else if (p.charData.name === "Sonic") {
                         if (p.velozDashTimer === 0 && (!p.isGrounded ? !p.velozDashUsed : true)) {
-                            if (keys.attackB && !keys.up) {
+                            if (keys.attackB && (!keys.up || p.isGrounded)) {
                                 p.velozCharge++;
                                 p.vx = 0;
                                 if (p.vy > 0) p.vy = 0.5; // slow fall during charge
@@ -1218,8 +1362,27 @@ class SmashGame {
                                 playSynthSound('jump');
                             }
                         }
+                    } else if (p.charData.name === "Gordo") {
+                        if (p.gordoCooldown <= 0) {
+                            if (keys.attackB && (!keys.up || p.isGrounded)) {
+                                p.gordoCharge++;
+                                p.vx = 0;
+                                if (p.vy > 0) p.vy = 0.5; // Slow fall during charging
+
+                                if (p.gordoCharge >= 30) {
+                                    p.charData.specials.neutral(p, 1.0);
+                                    p.gordoCharge = 0;
+                                    p.gordoCooldown = 40;
+                                }
+                            } else if (p.gordoCharge > 0) {
+                                const progress = Math.min(1.0, p.gordoCharge / 30);
+                                p.charData.specials.neutral(p, progress);
+                                p.gordoCharge = 0;
+                                p.gordoCooldown = 40;
+                            }
+                        }
                     } else {
-                        if (keys.attackB && !prevKeys.attackB && !keys.up) {
+                        if (keys.attackB && !prevKeys.attackB && (!keys.up || p.isGrounded)) {
                             p.charData.specials.neutral(p);
                         }
                     }
@@ -1236,7 +1399,7 @@ class SmashGame {
 
         // Apply Gravity
         if (!p.isGrounded) {
-            if (p.charData.name === "Volador" && p.voladorFlying) {
+            if (p.charData.name === "Palomo" && p.voladorFlying) {
                 const ctrlKeys = p.lastControlState || {};
                 if (p.vy >= 0 && (ctrlKeys.left || ctrlKeys.right)) {
                     // Glide: very slow fall
@@ -1254,15 +1417,19 @@ class SmashGame {
         p.y += p.vy;
 
         // Prevent Volador from dying off the top of the map
-        if (p.charData.name === "Volador") {
+        if (p.charData.name === "Palomo") {
             p.y = Math.max(-100, p.y);
         }
 
-        // Ground slam hit (Pesado custom logic)
         if (p.onGroundSlam) {
             if (p.isGrounded || p.vy === 0) {
                 p.onGroundSlam = false;
-                triggerMeleeHitbox(p, 90, 40, 16, 18, 0, 10);
+                const fallDistance = Math.max(0, p.y - (p.gordoSlamStartY || p.y));
+                const chargeBonus = (p.gordoSlamCharge || 0) * 5;
+                const fallBonus = Math.min(9, (fallDistance / 110) * 2);
+                const finalDmg = Math.round(6 + chargeBonus + fallBonus);
+
+                triggerMeleeHitbox(p, 90, 40, finalDmg, finalDmg * 0.8, 0, 10);
                 playSynthSound('heavy_hit');
             }
         }
@@ -1337,7 +1504,12 @@ class SmashGame {
                 p.vy = 0;
                 p.respawning = false;
                 const alivePlayers = this.players.filter(pl => pl.stocks > 0);
-                if (alivePlayers.length <= 1) {
+                let teamsAliveCount = 0;
+                if (this.teamsEnabled) {
+                    const aliveTeams = new Set(alivePlayers.map(pl => pl.team));
+                    teamsAliveCount = aliveTeams.size;
+                }
+                if (this.teamsEnabled ? (teamsAliveCount <= 1) : (alivePlayers.length <= 1)) {
                     this.endMatch();
                 }
                 return; // Early return to prevent respawning
@@ -1448,22 +1620,43 @@ class SmashGame {
 
         let winner = this.players[0] ? this.players[0].name : "Jugador 1";
 
-        if (this.matchType === 'stocks') {
+        if (this.teamsEnabled) {
+            let winningTeamId = null;
             const alivePlayers = this.players.filter(p => p.stocks > 0);
-            if (alivePlayers.length === 1) {
-                winner = alivePlayers[0].name;
-            } else if (alivePlayers.length > 1) {
-                const sorted = [...alivePlayers].sort((a, b) => b.stocks - a.stocks || b.score - a.score);
-                winner = sorted[0].name;
+            if (this.matchType === 'stocks' && alivePlayers.length > 0) {
+                winningTeamId = alivePlayers[0].team;
             } else {
-                winner = "Empate";
+                const teamStats = {};
+                this.players.forEach(p => {
+                    if (!teamStats[p.team]) teamStats[p.team] = { stocks: 0, score: 0 };
+                    teamStats[p.team].stocks += (p.stocks || 0);
+                    teamStats[p.team].score += (p.score || 0);
+                });
+                const sortedTeams = Object.keys(teamStats).sort((a, b) => {
+                    return teamStats[b].stocks - teamStats[a].stocks || teamStats[b].score - teamStats[a].score;
+                });
+                winningTeamId = parseInt(sortedTeams[0]);
             }
+            const winningPlayers = this.players.filter(p => p.team === winningTeamId);
+            winner = winningPlayers.map(p => p.name).join(" y ");
         } else {
-            const sorted = [...this.players].sort((a, b) => b.score - a.score);
-            if (sorted.length > 1 && sorted[0].score === sorted[1].score) {
-                winner = "Empate";
-            } else if (sorted.length > 0) {
-                winner = sorted[0].name;
+            if (this.matchType === 'stocks') {
+                const alivePlayers = this.players.filter(p => p.stocks > 0);
+                if (alivePlayers.length === 1) {
+                    winner = alivePlayers[0].name;
+                } else if (alivePlayers.length > 1) {
+                    const sorted = [...alivePlayers].sort((a, b) => b.stocks - a.stocks || b.score - a.score);
+                    winner = sorted[0].name;
+                } else {
+                    winner = "Empate";
+                }
+            } else {
+                const sorted = [...this.players].sort((a, b) => b.score - a.score);
+                if (sorted.length > 1 && sorted[0].score === sorted[1].score) {
+                    winner = "Empate";
+                } else if (sorted.length > 0) {
+                    winner = sorted[0].name;
+                }
             }
         }
 
@@ -1587,7 +1780,7 @@ class SmashGame {
                 this.ctx.globalAlpha = 0.4;
             }
 
-            const isFlyingHorizontal = (p.charData.name === "Volador" && p.voladorFlying && !p.isGrounded);
+            const isFlyingHorizontal = (p.charData.name === "Palomo" && p.voladorFlying && !p.isGrounded);
             if (isFlyingHorizontal) {
                 const cx = p.x + p.w / 2;
                 const cy = p.y + p.h / 2;
@@ -1670,7 +1863,7 @@ class SmashGame {
             this.ctx.restore();
 
             // Wings for Volador class
-            if (p.charData.name === "Volador") {
+            if (p.charData.name === "Palomo") {
                 this.ctx.fillStyle = '#f472b6'; // Pastel pink wings
                 const wingSwing = Math.sin(flapTime) * 0.4;
 
@@ -1733,7 +1926,7 @@ class SmashGame {
             }
             this.ctx.rotate(attackAngle);
 
-            if (p.charData.name === "Balanceado") {
+            if (p.charData.name === "Mago") {
                 // Draw Sword
                 this.ctx.strokeStyle = '#eab308'; // Golden blade
                 this.ctx.lineWidth = 4;
@@ -1750,7 +1943,7 @@ class SmashGame {
                 this.ctx.moveTo(4, 0);
                 this.ctx.lineTo(4, -6);
                 this.ctx.stroke();
-            } else if (p.charData.name === "Veloz") {
+            } else if (p.charData.name === "Sonic") {
                 // Neon energy daggers
                 this.ctx.strokeStyle = '#22c55e'; // Neon Green
                 this.ctx.lineWidth = 3;
@@ -1761,7 +1954,7 @@ class SmashGame {
                 this.ctx.lineTo(16, 4);
                 this.ctx.stroke();
                 this.ctx.shadowBlur = 0; // Reset
-            } else if (p.charData.name === "Pesado") {
+            } else if (p.charData.name === "Gordo") {
                 // Giant combat mallet/hammer
                 this.ctx.strokeStyle = '#78716c'; // Stone shaft
                 this.ctx.lineWidth = 5;
@@ -1815,8 +2008,8 @@ class SmashGame {
             }
 
             // Draw charging effect for Balanceado
-            if (p.charData.name === "Balanceado" && p.balanceadoCharge > 0) {
-                const chargeProgress = Math.min(1, p.balanceadoCharge / 60);
+            if (p.charData.name === "Mago" && p.balanceadoCharge > 0) {
+                const chargeProgress = Math.min(1, p.balanceadoCharge / 90);
                 const radius = 6 + chargeProgress * 14;
                 this.ctx.fillStyle = `rgba(245, 158, 11, ${0.4 + chargeProgress * 0.6})`;
                 this.ctx.strokeStyle = '#ffffff';
@@ -1828,8 +2021,34 @@ class SmashGame {
                 this.ctx.stroke();
             }
 
+            // Draw charging effect for Gordo
+            if (p.charData.name === "Gordo" && p.gordoCharge > 0) {
+                const chargeProgress = Math.min(1, p.gordoCharge / 30);
+                const radius = 8 + chargeProgress * 10;
+                this.ctx.fillStyle = `rgba(239, 68, 68, ${0.3 + chargeProgress * 0.5})`;
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x + p.w / 2, p.y + p.h / 2, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+
+            // Draw charging effect for Palomo
+            if (p.charData.name === "Palomo" && p.voladorCharge > 0) {
+                const chargeProgress = Math.min(1, p.voladorCharge / 45);
+                const radius = 6 + chargeProgress * 12;
+                this.ctx.fillStyle = `rgba(192, 132, 252, ${0.4 + chargeProgress * 0.5})`;
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x + p.w / 2, p.y + p.h / 2, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+
             // Draw charging/sparkles effect for Veloz
-            if (p.charData.name === "Veloz" && p.velozCharge > 0) {
+            if (p.charData.name === "Sonic" && p.velozCharge > 0) {
                 const chargeProgress = Math.min(1, p.velozCharge / 45);
                 this.ctx.fillStyle = 'rgba(251, 191, 36, 0.5)';
                 this.ctx.strokeStyle = '#ffffff';
@@ -1846,7 +2065,7 @@ class SmashGame {
             }
 
             // Draw motion trail for Veloz
-            if (p.charData.name === "Veloz" && p.velozDashTimer > 0) {
+            if (p.charData.name === "Sonic" && p.velozDashTimer > 0) {
                 this.ctx.fillStyle = 'rgba(251, 191, 36, 0.3)';
                 this.ctx.fillRect(p.x - p.facing * 15, p.y, p.w, p.h);
                 this.ctx.fillStyle = 'rgba(251, 191, 36, 0.15)';

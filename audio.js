@@ -1,10 +1,39 @@
-// Web Audio API Context for Synthesis
+// Web Audio API Context for Synthesis and Buffer Playback
 let audioCtx = null;
 let sfxVolume = 0.15;
+
+// Audio buffer cache for preloaded effects (loaded & decoded in RAM)
+const audioBuffers = {};
+
+// Sound files registry - Only effects go here for RAM preloading
+const SOUND_FILES = {
+    'fernan-embestida': 'sound/efectos/fernan-embestida.mp3',
+    'puma': 'sound/efectos/puma.mp3',
+    'strike': 'sound/efectos/strike.mp3'
+};
 
 function initAudio() {
     if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+}
+
+// Preload and decode all defined audio files in RAM (sound/efectos only)
+async function preloadAudioFiles() {
+    initAudio();
+    for (const [key, path] of Object.entries(SOUND_FILES)) {
+        if (audioBuffers[path]) continue;
+        try {
+            const response = await fetch(path);
+            const arrayBuffer = await response.arrayBuffer();
+            audioCtx.decodeAudioData(arrayBuffer, (decodedBuffer) => {
+                audioBuffers[path] = decodedBuffer;
+            }, (err) => {
+                console.warn(`Error decoding audio file: ${path}`, err);
+            });
+        } catch (e) {
+            console.warn(`Failed to fetch audio file: ${path}`, e);
+        }
     }
 }
 
@@ -90,36 +119,65 @@ function playSynthSound(type) {
 }
 
 function playSoundFile(filePath, durationMs = null) {
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    const buffer = audioBuffers[filePath];
+    if (!buffer) {
+        // Fallback to HTML5 audio if not decoded yet
+        try {
+            const audio = new Audio(filePath);
+            audio.volume = sfxVolume;
+            audio.play().catch(e => console.warn("Failed to play sound file fallback:", e));
+            if (durationMs) {
+                setTimeout(() => {
+                    let fadeInterval = setInterval(() => {
+                        if (audio.volume > 0.02) {
+                            audio.volume = Math.max(0, audio.volume - 0.02);
+                        } else {
+                            clearInterval(fadeInterval);
+                            audio.pause();
+                        }
+                    }, 30);
+                }, durationMs);
+            }
+        } catch (e) {
+            console.warn("Error playing fallback sound file:", e);
+        }
+        return;
+    }
+
     try {
-        const audio = new Audio(filePath);
-        audio.volume = sfxVolume;
-        audio.play().catch(e => console.warn("Failed to play sound file:", e));
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.setValueAtTime(sfxVolume, audioCtx.currentTime);
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        source.start(0);
 
         if (durationMs) {
             setTimeout(() => {
-                // Smooth fade out before pausing
-                let fadeInterval = setInterval(() => {
-                    if (audio.volume > 0.02) {
-                        audio.volume = Math.max(0, audio.volume - 0.02);
-                    } else {
-                        clearInterval(fadeInterval);
-                        audio.pause();
-                    }
-                }, 30);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                setTimeout(() => {
+                    try { source.stop(); } catch (e) {}
+                }, 150);
             }, durationMs);
         }
     } catch (e) {
-        console.warn("Error playing sound file:", e);
+        console.warn("Error playing audio buffer:", e);
     }
 }
 
-// Menu Background Music Manager
+// Menu Background Music Manager (HTML5 Audio Streaming for long songs)
 let menuMusic = null;
 
 function playMenuMusic() {
     try {
         if (!menuMusic) {
-            menuMusic = new Audio('sound/main-theme.mp3');
+            menuMusic = new Audio('sound/musica/main-theme.mp3');
             menuMusic.loop = true;
         }
         menuMusic.volume = sfxVolume;
@@ -146,10 +204,11 @@ function updateMenuMusicVolume() {
     }
 }
 
-// Enable Audio & Menu Music on User Interaction
+// Enable Audio, preloading, and music on User Interaction
 function enableMenuMusicOnInteraction() {
     const handleStart = () => {
         initAudio();
+        preloadAudioFiles();
         if (typeof gameEngine === 'undefined' || !gameEngine.running) {
             playMenuMusic();
         }
@@ -160,18 +219,25 @@ function enableMenuMusicOnInteraction() {
     window.addEventListener('keydown', handleStart);
 }
 
-// Try to play immediately; if autoplay is blocked, fall back to first interaction
+// Try autoplay immediately; if blocked, fall back to first interaction
 (function tryAutoplayMenuMusic() {
     try {
+        // Try playing immediately using HTML5 Audio (can succeed if browser allows)
         if (!menuMusic) {
-            menuMusic = new Audio('sound/main-theme.mp3');
+            menuMusic = new Audio('sound/musica/main-theme.mp3');
             menuMusic.loop = true;
         }
         menuMusic.volume = sfxVolume;
         menuMusic.play().then(() => {
-            // Autoplay succeeded, no need for the interaction fallback
+            // Autoplay succeeded, but still bind interaction to preload SFX
+            const preloadOnAction = () => {
+                preloadAudioFiles();
+                window.removeEventListener('click', preloadOnAction);
+                window.removeEventListener('keydown', preloadOnAction);
+            };
+            window.addEventListener('click', preloadOnAction);
+            window.addEventListener('keydown', preloadOnAction);
         }).catch(() => {
-            // Blocked by browser policy — wait for first user interaction
             enableMenuMusicOnInteraction();
         });
     } catch (e) {

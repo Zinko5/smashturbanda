@@ -5,10 +5,77 @@ let isHost = false;
 let myId = null;
 let guestIndex = null; // Guest assigned index (1, 2, or 3)
 let lobbyPlayersState = []; // Holds current lobby name/chars state
+let roomCode = null;
+let selectedTeamLocal = 1;
+let isReadyLocal = false;
+let teamsEnabledLocal = false;
+
+let cachedPlayersConfig = null;
+let cachedStocksLimit = 3;
+let cachedTimeLimit = 2;
+let cachedTeamsEnabled = false;
+let cachedGameMode = 'vs_local';
+let countdownInterval = null;
+let countdownTimeLeft = 6.7;
+let isStageSelectActive = false;
+
+const actualChars = ['balanceado', 'veloz', 'pesado', 'zoner', 'volador'];
+function getRandomChar() {
+    return actualChars[Math.floor(Math.random() * actualChars.length)];
+}
+
+const originalPlaySoundFile = (typeof playSoundFile === 'function') ? playSoundFile : null;
+if (originalPlaySoundFile) {
+    playSoundFile = function(filePath, durationMs = null) {
+        originalPlaySoundFile(filePath, durationMs);
+        if (gameEngine && gameEngine.mode === 'vs_online' && isHost) {
+            if (filePath.includes('fernan-embestida')) {
+                broadcast({ type: 'play_sound', filePath, durationMs });
+            }
+        }
+    };
+}
+
+function cleanupPeer() {
+    if (connection) {
+        try { connection.close(); } catch(e){}
+        connection = null;
+    }
+    if (connections && connections.length > 0) {
+        connections.forEach(conn => {
+            if (conn) {
+                try { conn.close(); } catch(e){}
+            }
+        });
+        connections = [];
+    }
+    if (peer) {
+        try { peer.destroy(); } catch(e){}
+        peer = null;
+    }
+    isHost = false;
+    myId = null;
+    guestIndex = null;
+    lobbyPlayersState = [];
+    roomCode = null;
+    selectedTeamLocal = 1;
+    isReadyLocal = false;
+    teamsEnabledLocal = false;
+    cachedPlayersConfig = null;
+    cachedStocksLimit = 3;
+    cachedTimeLimit = 2;
+    cachedTeamsEnabled = false;
+    cachedGameMode = 'vs_local';
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = null;
+    isStageSelectActive = false;
+    const stageSelOver = document.getElementById('menu-stage-select');
+    if (stageSelOver) stageSelOver.classList.add('hidden');
+}
 
 // Initialize PeerJS connection
 function initMultiplayer(asHost = true) {
-    if (peer) return;
+    cleanupPeer();
 
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -23,6 +90,7 @@ function initMultiplayer(asHost = true) {
         peer.on('open', (id) => {
             if (asHost) {
                 myId = code;
+                roomCode = code;
                 document.getElementById('my-id').textContent = code;
                 showToast("¡Lobby listo! Código: " + code);
             } else {
@@ -141,6 +209,7 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     isHost = false;
 
     connection.on('open', () => {
+        roomCode = code;
         showToast("Conectado con el servidor. Esperando asignación...");
         document.getElementById('menu-lobby').classList.add('hidden');
         document.getElementById('menu-css').classList.remove('hidden');
@@ -186,8 +255,8 @@ let selectedCharLocal = 'balanceado';
 let selectedCharRemote = 'veloz';
 let selectedNameLocal = null;
 let selectedNameRemote = null;
-let selectedStageLocal = 'battlefield';
-let selectedStageRemote = 'battlefield';
+let selectedStageLocal = null;
+let selectedStageRemote = null;
 let selectedModeLocal = 'stocks';
 let cssReadyLocal = false;
 let cssReadyRemote = false;
@@ -212,6 +281,15 @@ function initCSSListeners() {
             playSynthSound('jump');
 
             if (gameEngine.mode === 'vs_online') {
+                if (isReadyLocal) {
+                    isReadyLocal = false;
+                    const btn = document.getElementById('btn-css-ready');
+                    if (btn) {
+                        btn.textContent = "¡Listo!";
+                        btn.classList.remove('danger');
+                        btn.classList.add('primary');
+                    }
+                }
                 sendCSSState();
             } else {
                 if (e.shiftKey) {
@@ -264,19 +342,29 @@ function initCSSListeners() {
         });
     });
 
-    // Stage selection listeners
-    document.querySelectorAll('.stage-card').forEach(card => {
+    // Stage voting listeners
+    document.querySelectorAll('.stage-vote-card').forEach(card => {
         card.addEventListener('click', () => {
-            if (gameEngine.mode === 'vs_online' && !isHost) {
-                showToast("Solo el Host elige el escenario");
-                return;
-            }
-            const stage = card.getAttribute('data-stage');
-            selectedStageLocal = stage;
+            if (!isStageSelectActive) return;
+            selectedStageLocal = card.getAttribute('data-stage');
             playSynthSound('shield');
-            updateCSSVisuals();
+
+            document.querySelectorAll('.stage-vote-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+
             if (gameEngine.mode === 'vs_online') {
-                sendCSSState();
+                if (isHost) {
+                    updateStageVotes();
+                } else {
+                    if (connection && connection.open) {
+                        connection.send({
+                            type: 'stage_vote',
+                            stage: selectedStageLocal
+                        });
+                    }
+                }
+            } else {
+                updateStageVotes();
             }
         });
     });
@@ -305,6 +393,51 @@ function initCSSListeners() {
         }
     });
 
+    // Teams mode select listener
+    document.getElementById('game-teams-select').addEventListener('change', (e) => {
+        if (gameEngine.mode === 'vs_online' && !isHost) {
+            showToast("Solo el Host configura las reglas");
+            document.getElementById('game-teams-select').value = teamsEnabledLocal ? "on" : "off";
+            return;
+        }
+        teamsEnabledLocal = (e.target.value === 'on');
+        const teamSelCont = document.getElementById('css-teams-control-container');
+        if (teamSelCont) {
+            teamSelCont.style.display = teamsEnabledLocal ? 'flex' : 'none';
+        }
+        if (gameEngine.mode === 'vs_online') {
+            sendCSSState();
+        } else {
+            updateCSSVisuals();
+        }
+    });
+
+    // Local team selection listener
+    document.getElementById('css-team-select').addEventListener('change', (e) => {
+        selectedTeamLocal = parseInt(e.target.value);
+        if (gameEngine.mode === 'vs_online') {
+            sendCSSState();
+        } else {
+            updateCSSVisuals();
+        }
+    });
+
+    // Ready toggle button listener
+    document.getElementById('btn-css-ready').addEventListener('click', () => {
+        isReadyLocal = !isReadyLocal;
+        const btn = document.getElementById('btn-css-ready');
+        if (isReadyLocal) {
+            btn.textContent = "No Listo";
+            btn.classList.remove('primary');
+            btn.classList.add('danger');
+        } else {
+            btn.textContent = "¡Listo!";
+            btn.classList.remove('danger');
+            btn.classList.add('primary');
+        }
+        sendCSSState();
+    });
+
     // Stocks limit listener
     document.getElementById('game-stocks-select').addEventListener('change', () => {
         if (gameEngine.mode === 'vs_online' && !isHost) {
@@ -329,12 +462,85 @@ function initCSSListeners() {
 }
 
 function updateCSSVisuals() {
-    const stageSelEl = document.getElementById('css-stage-selection');
-    if (stageSelEl) {
-        if (gameEngine.mode === 'vs_online' && !isHost) {
-            stageSelEl.style.display = 'none';
+    const isOnline = (gameEngine.mode === 'vs_online');
+    
+    const onlineHeader = document.getElementById('css-online-header');
+    const teamsCtrl = document.getElementById('css-teams-control-container');
+    const playersListCont = document.getElementById('css-players-list-container');
+    const roomCodeVal = document.getElementById('css-room-code-val');
+    const readyBtn = document.getElementById('btn-css-ready');
+    const startBtn = document.getElementById('btn-css-start');
+
+    if (isOnline) {
+        if (onlineHeader) onlineHeader.style.display = 'flex';
+        if (teamsCtrl) teamsCtrl.style.display = teamsEnabledLocal ? 'flex' : 'none';
+        if (playersListCont) playersListCont.style.display = 'flex';
+        if (roomCodeVal) roomCodeVal.textContent = roomCode || '----';
+        
+        // Render players list dynamically
+        const playersList = document.getElementById('css-players-list');
+        if (playersList) {
+            playersList.replaceChildren();
+            lobbyPlayersState.forEach((player, idx) => {
+                const row = document.createElement('div');
+                row.className = 'player-slot-row';
+                
+                const left = document.createElement('div');
+                left.style.display = 'flex';
+                left.style.gap = '10px';
+                left.style.alignItems = 'center';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'player-slot-name';
+                nameSpan.textContent = player.name;
+                left.appendChild(nameSpan);
+                
+                const charSpan = document.createElement('span');
+                charSpan.className = 'player-slot-char';
+                const charName = player.char === 'random' ? 'Aleatorio' : CHARACTERS[player.char].name;
+                charSpan.textContent = `(${charName})`;
+                left.appendChild(charSpan);
+
+                if (teamsEnabledLocal) {
+                    const teamSpan = document.createElement('span');
+                    teamSpan.className = `player-slot-team team-${player.team}-badge`;
+                    teamSpan.textContent = player.team;
+                    left.appendChild(teamSpan);
+                }
+                
+                row.appendChild(left);
+                
+                const statusSpan = document.createElement('span');
+                statusSpan.className = `status-badge ${player.ready ? 'status-ready' : 'status-not-ready'}`;
+                statusSpan.textContent = player.ready ? 'Listo' : 'No Listo';
+                row.appendChild(statusSpan);
+                
+                playersList.appendChild(row);
+            });
+        }
+        
+        // Disable pelear button if someone is not ready (excluding host)
+        const allGuestsReady = lobbyPlayersState.slice(1).every(p => p.ready);
+        if (isHost) {
+            if (readyBtn) readyBtn.style.display = 'none';
+            if (startBtn) {
+                startBtn.style.display = 'block';
+                startBtn.disabled = !allGuestsReady;
+                startBtn.textContent = allGuestsReady ? "¡Pelear!" : "Esperando jugadores...";
+            }
         } else {
-            stageSelEl.style.display = 'block';
+            if (readyBtn) readyBtn.style.display = 'block';
+            if (startBtn) startBtn.style.display = 'none';
+        }
+    } else {
+        if (onlineHeader) onlineHeader.style.display = 'none';
+        if (teamsCtrl) teamsCtrl.style.display = 'none';
+        if (playersListCont) playersListCont.style.display = 'none';
+        if (readyBtn) readyBtn.style.display = 'none';
+        if (startBtn) {
+            startBtn.style.display = 'block';
+            startBtn.disabled = false;
+            startBtn.textContent = "¡Pelear!";
         }
     }
 
@@ -391,18 +597,8 @@ function updateCSSVisuals() {
         }
     }
 
-    document.querySelectorAll('.stage-card').forEach(card => {
-        card.classList.remove('selected');
-        const st = card.getAttribute('data-stage');
-        const activeSt = (gameEngine.mode === 'vs_online' && !isHost) ? selectedStageRemote : selectedStageLocal;
-        if (st === activeSt) {
-            card.classList.add('selected');
-        }
-    });
-
     // Hide/show rules container and start button for guests
     const rulesContainer = document.getElementById('game-rules-container');
-    const startBtn = document.getElementById('btn-css-start');
     if (gameEngine.mode === 'vs_online' && !isHost) {
         if (rulesContainer) rulesContainer.classList.add('hidden');
         if (startBtn) startBtn.classList.add('hidden');
@@ -420,7 +616,10 @@ function sendCSSState() {
             connection.send({
                 type: 'css_sync',
                 char: selectedCharLocal,
-                customName: selectedNameLocal
+                customName: selectedNameLocal,
+                team: selectedTeamLocal,
+                ready: isReadyLocal,
+                stageVote: selectedStageLocal
             });
         }
     }
@@ -446,17 +645,30 @@ function sendLobbySync() {
         {
             name: selectedNameLocal || "Host (P1)",
             char: selectedCharLocal,
-            customName: selectedNameLocal
+            customName: selectedNameLocal,
+            team: selectedTeamLocal,
+            ready: isReadyLocal
         }
     ];
     connections.forEach((conn, idx) => {
         players.push({
             name: conn.selectedCustomName || `Jugador ${idx + 2}`,
             char: conn.selectedChar || 'veloz',
-            customName: conn.selectedCustomName || null
+            customName: conn.selectedCustomName || null,
+            team: conn.selectedTeam || (idx + 2),
+            ready: conn.isReady || false
         });
     });
     lobbyPlayersState = players;
+
+    const stageVotes = { battlefield: 0, destination: 0, moving: 0, random: 0 };
+    if (selectedStageLocal) stageVotes[selectedStageLocal]++;
+    connections.forEach(conn => {
+        if (conn.selectedStage) {
+            stageVotes[conn.selectedStage]++;
+        }
+    });
+
     updateCSSVisuals();
 
     const stocksLimitVal = parseInt(document.getElementById('game-stocks-select').value) || 3;
@@ -466,9 +678,11 @@ function sendLobbySync() {
         type: 'lobby_sync',
         players: players,
         stage: selectedStageLocal,
+        stageVotes: stageVotes,
         mode: selectedModeLocal,
         stocksLimit: stocksLimitVal,
-        timeLimit: timeLimitVal
+        timeLimit: timeLimitVal,
+        teamsEnabled: teamsEnabledLocal
     });
 }
 
@@ -491,6 +705,14 @@ function handleReceivedData(data, senderConn) {
         selectedStageLocal = data.stage;
         selectedModeLocal = data.mode;
         document.getElementById('game-mode-select').value = data.mode;
+
+        // Sync rules
+        teamsEnabledLocal = data.teamsEnabled || false;
+        document.getElementById('game-teams-select').value = teamsEnabledLocal ? "on" : "off";
+        const teamSelCont = document.getElementById('css-teams-control-container');
+        if (teamSelCont) {
+            teamSelCont.style.display = teamsEnabledLocal ? 'flex' : 'none';
+        }
 
         // Toggle limits UI
         if (data.mode === 'stocks') {
@@ -518,12 +740,45 @@ function handleReceivedData(data, senderConn) {
         if (isHost && senderConn) {
             senderConn.selectedChar = data.char;
             senderConn.selectedCustomName = data.customName || null;
+            senderConn.selectedTeam = data.team || 1;
+            senderConn.isReady = data.ready || false;
+            senderConn.selectedStage = data.stageVote || null;
             sendLobbySync();
         }
     } else if (data.type === 'lobby_full') {
         showToast("Lobby lleno (máximo 4 jugadores)");
+    } else if (data.type === 'go_to_stage_select') {
+        cachedPlayersConfig = data.playersConfig;
+        cachedStocksLimit = data.stocksLimit;
+        cachedTimeLimit = data.timeLimit;
+        cachedTeamsEnabled = data.teamsEnabled;
+        cachedGameMode = 'vs_online';
+        selectedModeLocal = data.mode;
+        
+        document.getElementById('menu-css').classList.add('hidden');
+        document.getElementById('menu-stage-select').classList.remove('hidden');
+        startStageSelectionCountdown();
+    } else if (data.type === 'stage_vote') {
+        if (isHost && senderConn) {
+            senderConn.selectedStage = data.stage;
+            updateStageVotes();
+        }
+    } else if (data.type === 'stage_votes_sync') {
+        if (data.stageVotes) {
+            Object.keys(data.stageVotes).forEach(stg => {
+                const badge = document.getElementById(`vote-count-${stg}`);
+                if (badge) {
+                    badge.textContent = `${data.stageVotes[stg]} ${data.stageVotes[stg] === 1 ? 'voto' : 'votos'}`;
+                }
+            });
+        }
+    } else if (data.type === 'spin_roulette') {
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdownInterval = null;
+        isStageSelectActive = false;
+        triggerRouletteAndStartMatch(data.winningStage);
     } else if (data.type === 'css_start') {
-        gameEngine.setupMatch('vs_online', data.playersConfig, data.stage, data.mode, data.stocksLimit, data.timeLimit);
+        gameEngine.setupMatch('vs_online', data.playersConfig, data.stage, data.mode, data.stocksLimit, data.timeLimit, 'medium', data.teamsEnabled);
         overrideGameLoopForP2P();
     } else if (data.type === 'guest_inputs') {
         if (isHost && gameEngine.players[data.playerIndex]) {
@@ -533,6 +788,14 @@ function handleReceivedData(data, senderConn) {
         if (!isHost && gameEngine.running) {
             applyHostStateToGuest(data.state);
         }
+    } else if (data.type === 'play_sound') {
+        if (typeof originalPlaySoundFile === 'function') {
+            originalPlaySoundFile(data.filePath, data.durationMs);
+        } else if (typeof playSoundFile === 'function') {
+            playSoundFile(data.filePath, data.durationMs);
+        }
+    } else if (data.type === 'stage_timer_sync') {
+        countdownTimeLeft = data.timeLeft;
     } else if (data.type === 'match_end') {
         gameEngine.running = false;
         if (gameEngine.updateInterval) {
@@ -557,6 +820,16 @@ function handleReceivedData(data, senderConn) {
             clearInterval(gameEngine.updateInterval);
             gameEngine.updateInterval = null;
         }
+        isReadyLocal = false;
+        selectedStageLocal = null;
+
+        const btn = document.getElementById('btn-css-ready');
+        if (btn) {
+            btn.textContent = "¡Listo!";
+            btn.classList.remove('danger');
+            btn.classList.add('primary');
+        }
+
         document.getElementById('game-hud').classList.add('hidden');
         const timerEl = document.getElementById('game-timer');
         if (timerEl) timerEl.classList.add('hidden');
@@ -582,59 +855,234 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
         }
 
         // Build players config
+        const resolvedHostChar = selectedCharLocal === 'random' ? getRandomChar() : selectedCharLocal;
         const playersConfig = [
-            { id: 'p1', name: selectedNameLocal || "Host (P1)", char: selectedCharLocal }
+            { id: 'p1', name: selectedNameLocal || "Host (P1)", char: resolvedHostChar, team: selectedTeamLocal }
         ];
         connections.forEach((conn, idx) => {
+            const remoteChar = conn.selectedChar || 'veloz';
+            const resolvedRemoteChar = remoteChar === 'random' ? getRandomChar() : remoteChar;
             playersConfig.push({
                 id: `p${idx + 2}`,
                 name: conn.selectedCustomName || `Jugador ${idx + 2}`,
-                char: conn.selectedChar || 'veloz'
+                char: resolvedRemoteChar,
+                team: conn.selectedTeam || (idx + 2)
             });
         });
 
-        // Host starts match
+        cachedPlayersConfig = playersConfig;
+        cachedStocksLimit = stocksLimitVal;
+        cachedTimeLimit = timeLimitVal;
+        cachedTeamsEnabled = teamsEnabledLocal;
+        cachedGameMode = 'vs_online';
+
+        // Move everyone to stage select screen
         broadcast({
-            type: 'css_start',
+            type: 'go_to_stage_select',
             playersConfig: playersConfig,
-            stage: selectedStageLocal,
             mode: selectedModeLocal,
             stocksLimit: stocksLimitVal,
-            timeLimit: timeLimitVal
+            timeLimit: timeLimitVal,
+            teamsEnabled: teamsEnabledLocal
         });
-
-        gameEngine.setupMatch('vs_online', playersConfig, selectedStageLocal, selectedModeLocal, stocksLimitVal, timeLimitVal);
-        overrideGameLoopForP2P();
     } else {
-        // Local game startup
-        const p1 = selectedCharLocal;
-        const p2 = selectedCharRemote || 'veloz';
+        // Local game startup configuration
+        let p1 = selectedCharLocal;
+        if (p1 === 'random') p1 = getRandomChar();
+        let p2 = selectedCharRemote || 'veloz';
+        if (p2 === 'random') p2 = getRandomChar();
         const mode = gameEngine.mode; // local vs, cpu, training
-        const stage = document.querySelector('.stage-card.selected').getAttribute('data-stage');
         const rule = document.getElementById('game-mode-select').value;
         const diff = document.getElementById('cpu-diff-select').value;
 
         let playersConfig = [];
         if (mode === 'vs_local') {
             playersConfig = [
-                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1 },
-                { id: 'p2', name: selectedNameRemote || 'Jugador 2', char: p2 }
+                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1, team: 1 },
+                { id: 'p2', name: selectedNameRemote || 'Jugador 2', char: p2, team: teamsEnabledLocal ? 2 : null }
             ];
         } else if (mode === 'vs_cpu') {
             playersConfig = [
-                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1 },
-                { id: 'p2', name: selectedNameRemote || `CPU (${diff.toUpperCase()})`, char: p2 }
+                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1, team: 1 },
+                { id: 'p2', name: selectedNameRemote || `CPU (${diff.toUpperCase()})`, char: p2, team: teamsEnabledLocal ? 2 : null }
             ];
         } else {
             playersConfig = [
-                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1 },
-                { id: 'p2', name: selectedNameRemote || 'CPU Dummy', char: p2 }
+                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1, team: 1 },
+                { id: 'p2', name: selectedNameRemote || 'CPU Dummy', char: p2, team: teamsEnabledLocal ? 2 : null }
             ];
         }
 
-        gameEngine.setupMatch(mode, playersConfig, stage, rule, stocksLimitVal, timeLimitVal, diff);
+        cachedPlayersConfig = playersConfig;
+        cachedStocksLimit = stocksLimitVal;
+        cachedTimeLimit = timeLimitVal;
+        cachedTeamsEnabled = teamsEnabledLocal;
+        cachedGameMode = mode;
     }
+
+    // Transition to Stage Select screen
+    document.getElementById('menu-css').classList.add('hidden');
+    document.getElementById('menu-stage-select').classList.remove('hidden');
+    startStageSelectionCountdown();
 });
+
+function startStageSelectionCountdown() {
+    isStageSelectActive = true;
+    selectedStageLocal = null; // Default to no vote cast
+    countdownTimeLeft = 16.7;
+
+    // Reset selected class on all stage vote cards
+    document.querySelectorAll('.stage-vote-card').forEach(c => c.classList.remove('selected'));
+
+    updateStageVotes();
+
+    const timerBadge = document.getElementById('stage-select-timer');
+    if (timerBadge) timerBadge.textContent = countdownTimeLeft.toFixed(1);
+
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(() => {
+        countdownTimeLeft -= 0.1;
+        if (countdownTimeLeft <= 0) {
+            countdownTimeLeft = 0;
+            if (timerBadge) timerBadge.textContent = "0.0";
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            isStageSelectActive = false;
+
+            // Host or Local calculates weighted winner
+            if (gameEngine.mode !== 'vs_online' || isHost) {
+                const votes = { battlefield: 0, destination: 0, moving: 0, random: 0 };
+                if (selectedStageLocal) votes[selectedStageLocal]++;
+                if (gameEngine.mode === 'vs_online') {
+                    connections.forEach(conn => {
+                        if (conn.selectedStage) {
+                            votes[conn.selectedStage]++;
+                        }
+                    });
+                }
+
+                const pool = [];
+                Object.keys(votes).forEach(stg => {
+                    for (let i = 0; i < votes[stg]; i++) {
+                        pool.push(stg);
+                    }
+                });
+
+                let chosenStage = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : ['battlefield', 'destination', 'moving'][Math.floor(Math.random() * 3)];
+                if (chosenStage === 'random') {
+                    chosenStage = ['battlefield', 'destination', 'moving'][Math.floor(Math.random() * 3)];
+                }
+
+                if (gameEngine.mode === 'vs_online') {
+                    broadcast({
+                        type: 'spin_roulette',
+                        winningStage: chosenStage,
+                        stageVotes: votes
+                    });
+                }
+
+                triggerRouletteAndStartMatch(chosenStage);
+            }
+        } else {
+            if (timerBadge) timerBadge.textContent = countdownTimeLeft.toFixed(1);
+        }
+    }, 100);
+}
+
+function updateStageVotes() {
+    const votes = { battlefield: 0, destination: 0, moving: 0, random: 0 };
+    if (selectedStageLocal) votes[selectedStageLocal]++;
+
+    if (gameEngine.mode === 'vs_online') {
+        if (isHost) {
+            connections.forEach(conn => {
+                if (conn.selectedStage) {
+                    votes[conn.selectedStage]++;
+                }
+            });
+            broadcast({
+                type: 'stage_votes_sync',
+                stageVotes: votes
+            });
+        }
+    }
+
+    Object.keys(votes).forEach(stg => {
+        const badge = document.getElementById(`vote-count-${stg}`);
+        if (badge) {
+            badge.textContent = `${votes[stg]} ${votes[stg] === 1 ? 'voto' : 'votos'}`;
+        }
+    });
+
+    // Accelerate timer if everyone has voted
+    if (gameEngine.mode !== 'vs_online' || isHost) {
+        let everyoneVoted = false;
+        if (gameEngine.mode === 'vs_online') {
+            everyoneVoted = (selectedStageLocal !== null) && connections.every(conn => conn.selectedStage !== null);
+        } else {
+            everyoneVoted = (selectedStageLocal !== null);
+        }
+
+        if (everyoneVoted && countdownTimeLeft > 4.67) {
+            countdownTimeLeft = 4.67;
+            if (gameEngine.mode === 'vs_online' && isHost) {
+                broadcast({
+                    type: 'stage_timer_sync',
+                    timeLeft: countdownTimeLeft
+                });
+            }
+        }
+    }
+}
+
+function runRouletteAnimation(winningStage, callback) {
+    const stages = ['battlefield', 'destination', 'moving', 'random'];
+    let currentIndex = 0;
+    let delay = 80;
+    let iterations = 0;
+    const maxIterations = 20;
+
+    function step() {
+        document.querySelectorAll('.stage-vote-card').forEach(card => card.classList.remove('roulette-flash'));
+
+        const currentStage = stages[currentIndex];
+        const card = document.querySelector(`.stage-vote-card[data-stage="${currentStage}"]`);
+        if (card) card.classList.add('roulette-flash');
+
+        currentIndex = (currentIndex + 1) % stages.length;
+        iterations++;
+
+        if (iterations < maxIterations) {
+            delay += 12;
+            setTimeout(step, delay);
+        } else {
+            document.querySelectorAll('.stage-vote-card').forEach(card => {
+                card.classList.remove('roulette-flash');
+                card.classList.remove('selected');
+                if (card.getAttribute('data-stage') === winningStage) {
+                    card.classList.add('selected');
+                }
+            });
+            playSynthSound('heavy_hit');
+            setTimeout(callback, 1200);
+        }
+    }
+    playSynthSound('shoot');
+    step();
+}
+
+function triggerRouletteAndStartMatch(winningStage) {
+    runRouletteAnimation(winningStage, () => {
+        document.getElementById('menu-stage-select').classList.add('hidden');
+        if (cachedGameMode === 'vs_online') {
+            gameEngine.setupMatch('vs_online', cachedPlayersConfig, winningStage, selectedModeLocal, cachedStocksLimit, cachedTimeLimit, 'medium', cachedTeamsEnabled);
+            overrideGameLoopForP2P();
+        } else {
+            const diff = document.getElementById('cpu-diff-select').value;
+            gameEngine.setupMatch(cachedGameMode, cachedPlayersConfig, winningStage, document.getElementById('game-mode-select').value, cachedStocksLimit, cachedTimeLimit, diff, cachedTeamsEnabled);
+        }
+    });
+}
 
 function overrideGameLoopForP2P() {
     const originalUpdate = gameEngine.update.bind(gameEngine);
@@ -672,20 +1120,7 @@ function overrideGameLoopForP2P() {
             }
         } else {
             // Guest collects inputs and sends them to Host immediately
-            const inputsP1 = gameEngine.getPlayerInputs('p1');
-            const inputsP2 = gameEngine.getPlayerInputs('p2');
-
-            const inputs = {
-                left: inputsP1.left || inputsP2.left,
-                right: inputsP1.right || inputsP2.right,
-                up: inputsP1.up || inputsP2.up,
-                down: inputsP1.down || inputsP2.down,
-                jump: inputsP1.jump || inputsP2.jump,
-                attackA: inputsP1.attackA || inputsP2.attackA,
-                attackB: inputsP1.attackB || inputsP2.attackB,
-                shield: inputsP1.shield || inputsP2.shield,
-                grab: inputsP1.grab || inputsP2.grab
-            };
+            const inputs = gameEngine.getPlayerInputs('p1');
 
             if (connection && connection.open) {
                 connection.send({
@@ -734,7 +1169,9 @@ function packPlayerState(p) {
         voladorFlying: p.voladorFlying || false,
         voladorBombCooldown: p.voladorBombCooldown || 0,
         heldItem: p.heldItem || null,
-        balanceadoCharge: p.balanceadoCharge || 0
+        balanceadoCharge: p.balanceadoCharge || 0,
+        gordoCharge: p.gordoCharge || 0,
+        voladorCharge: p.voladorCharge || 0
     };
 }
 
@@ -783,12 +1220,12 @@ function applyHostStateToGuest(state) {
         // Play item activation sound on Guest if new ones are spawned
         if (state.pumas && state.pumas.length > gameEngine.pumas.length) {
             if (typeof playSoundFile === 'function') {
-                playSoundFile('sound/puma.mp3');
+                playSoundFile('sound/efectos/puma.mp3');
             }
         }
         if (state.bombers && state.bombers.length > gameEngine.bombers.length) {
             if (typeof playSoundFile === 'function') {
-                playSoundFile('sound/strike.mp3', 4000);
+                playSoundFile('sound/efectos/strike.mp3', 4000);
             }
         }
 
@@ -855,6 +1292,8 @@ function unpackPlayerState(p, state) {
     p.voladorFlying = state.voladorFlying || false;
     p.voladorBombCooldown = state.voladorBombCooldown || 0;
     p.heldItem = state.heldItem || null;
+    p.gordoCharge = state.gordoCharge || 0;
+    p.voladorCharge = state.voladorCharge || 0;
 }
 
 // Menu Navigations
@@ -909,11 +1348,15 @@ document.getElementById('btn-vs-online').addEventListener('click', () => {
 document.getElementById('btn-css-back').addEventListener('click', () => {
     document.getElementById('menu-css').classList.add('hidden');
     document.getElementById('menu-main').classList.remove('hidden');
+    if (gameEngine.mode === 'vs_online') {
+        cleanupPeer();
+    }
 });
 
 document.getElementById('btn-lobby-back').addEventListener('click', () => {
     document.getElementById('menu-lobby').classList.add('hidden');
     document.getElementById('menu-main').classList.remove('hidden');
+    cleanupPeer();
 });
 
 // Options panel hooks
@@ -977,10 +1420,35 @@ document.getElementById('btn-pause-exit').addEventListener('click', () => {
 document.getElementById('btn-pause-lobby').addEventListener('click', () => {
     if (gameEngine.mode === 'vs_online') {
         if (isHost) {
+            isReadyLocal = false;
+            selectedStageLocal = null;
+            connections.forEach(conn => {
+                conn.isReady = false;
+                conn.selectedStage = null;
+            });
+
+            const btn = document.getElementById('btn-css-ready');
+            if (btn) {
+                btn.textContent = "¡Listo!";
+                btn.classList.remove('danger');
+                btn.classList.add('primary');
+            }
+
+            sendLobbySync();
             broadcast({ type: 'go_to_css' });
         } else {
             showToast("Esperando a que el Host inicie el retorno...");
             return;
+        }
+    } else {
+        isReadyLocal = false;
+        selectedStageLocal = null;
+        
+        const btn = document.getElementById('btn-css-ready');
+        if (btn) {
+            btn.textContent = "¡Listo!";
+            btn.classList.remove('danger');
+            btn.classList.add('primary');
         }
     }
 
@@ -1109,6 +1577,9 @@ function initVolumeControl() {
                 lastActiveVolume = sfxVolume;
             }
             updateVolumeUI();
+            if (typeof updateMenuMusicVolume === 'function') {
+                updateMenuMusicVolume();
+            }
 
             // Sync with Options slider if it exists
             const optionsSlider = document.getElementById('slider-sfx');
@@ -1127,6 +1598,9 @@ function initVolumeControl() {
             }
             updateVolumeUI();
             playSynthSound('shield');
+            if (typeof updateMenuMusicVolume === 'function') {
+                updateMenuMusicVolume();
+            }
 
             // Sync with Options slider if it exists
             const optionsSlider = document.getElementById('slider-sfx');
@@ -1166,12 +1640,14 @@ function initLobbyUI() {
     document.getElementById('btn-host-back').addEventListener('click', () => {
         document.getElementById('lobby-host-view').classList.add('hidden');
         document.getElementById('lobby-role-select').classList.remove('hidden');
+        cleanupPeer();
     });
 
     // Guest back to selection
     document.getElementById('btn-guest-back').addEventListener('click', () => {
         document.getElementById('lobby-guest-view').classList.add('hidden');
         document.getElementById('lobby-role-select').classList.remove('hidden');
+        cleanupPeer();
     });
 
     // Copy to clipboard
