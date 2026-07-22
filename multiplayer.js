@@ -627,7 +627,7 @@ function sendCSSState() {
 
 function sendLobbySync() {
     // Exclusivity collision check: Host has priority, then Guest connections in order of registration.
-    const namePool = { Alex: null, Martín: null, Víctor: null, Gabriel: null };
+    const namePool = { Alex: null, Martín: null, Víctor: null, Gabriel: null, Omar: null };
 
     if (selectedNameLocal) namePool[selectedNameLocal] = 'host';
 
@@ -1086,14 +1086,16 @@ function triggerRouletteAndStartMatch(winningStage) {
 
 function overrideGameLoopForP2P() {
     const originalUpdate = gameEngine.update.bind(gameEngine);
+    let networkTickCount = 0;
 
     gameEngine.update = () => {
         if (isHost) {
             // Host computes physics
             originalUpdate();
 
-            // Send computed coordinates/scores/stocks to all guests (omitting static platforms and visual particles)
-            if (connections.length > 0) {
+            networkTickCount++;
+            // Send computed coordinates/scores/stocks to all guests (30Hz tickrate instead of 60Hz to reduce network lag)
+            if (connections.length > 0 && networkTickCount % 2 === 0) {
                 broadcast({
                     type: 'host_state',
                     state: {
@@ -1571,6 +1573,7 @@ function initVolumeControl() {
 
     if (slider) {
         slider.value = sfxVolume;
+        updateVolumeUI();
         slider.addEventListener('input', (e) => {
             sfxVolume = parseFloat(e.target.value);
             if (sfxVolume > 0) {

@@ -7,20 +7,22 @@ const headImages = {
     'Alex': new Image(),
     'Martín': new Image(),
     'Víctor': new Image(),
-    'Gabriel': new Image()
+    'Gabriel': new Image(),
+    'Omar': new Image()
 };
-headImages['Alex'].src = 'img/alex-jugador.png';
-headImages['Martín'].src = 'img/martin-jugador.png';
-headImages['Víctor'].src = 'img/victor-jugador.png';
-headImages['Gabriel'].src = 'img/gabriel-jugador.png';
+headImages['Alex'].src = 'img/personas/alex-cara.png';
+headImages['Martín'].src = 'img/personas/martin-cara.png';
+headImages['Víctor'].src = 'img/personas/victor-cara.png';
+headImages['Gabriel'].src = 'img/personas/gabriel-cara.png';
+headImages['Omar'].src = 'img/personas/omar-cara.png';
 
 // Preload item images
 const itemImages = {
     'puma': new Image(),
     'yahu-strike': new Image()
 };
-itemImages['puma'].src = 'img/activable-puma.png';
-itemImages['yahu-strike'].src = 'img/yahu-strike.png';
+itemImages['puma'].src = 'img/objetos/activable-puma.png';
+itemImages['yahu-strike'].src = 'img/objetos/yahu-strike.png';
 
 // Phenotype Configurations
 const PHENOTYPES = {
@@ -402,6 +404,10 @@ class SmashGame {
         this.p1CharSelected = 'balanceado';
         this.p2CharSelected = 'veloz';
 
+        this.slowMoActive = false;
+        this.slowMoTarget = null;
+        this.slowMoTimer = 0;
+
         this.resize();
         window.addEventListener('resize', () => this.resize());
     }
@@ -522,6 +528,10 @@ class SmashGame {
         this.gameWinner = null;
         this.teamsEnabled = teamsEnabled;
 
+        this.slowMoActive = false;
+        this.slowMoTarget = null;
+        this.slowMoTimer = 0;
+
         this.timeRemaining = timeLimitMinutes * 60 * 60; // time in frames (60fps * 60secs * minutes)
 
         // Load Stage Platforms
@@ -587,6 +597,9 @@ class SmashGame {
         if (typeof stopMenuMusic === 'function') {
             stopMenuMusic();
         }
+        if (typeof playBattleMusic === 'function') {
+            playBattleMusic();
+        }
 
         document.getElementById('game-hud').classList.remove('hidden');
 
@@ -622,16 +635,9 @@ class SmashGame {
 
     startLoops() {
         this.running = true;
-
-        if (this.updateInterval) clearInterval(this.updateInterval);
-
-        this.updateInterval = setInterval(() => {
-            if (this.running) {
-                this.update();
-            }
-        }, 1000 / 60);
-
-        this.loop();
+        this.accumulator = 0;
+        this.lastTime = performance.now();
+        requestAnimationFrame((t) => this.loop(t));
     }
 
     updateHUD() {
@@ -641,8 +647,9 @@ class SmashGame {
         const colors = ['#00ccff', '#ff0055', '#ffcc00', '#00ff00'];
 
         // Reconstruct only if player count changes or differs
-        if (hudContainer.children.length !== this.players.length) {
+        if (hudContainer.children.length !== this.players.length || !this.hudCachedElements) {
             hudContainer.replaceChildren();
+            this.hudCachedElements = [];
             this.players.forEach((p, idx) => {
                 const playerDiv = document.createElement('div');
                 playerDiv.className = `hud-player player-p${idx + 1}`;
@@ -664,15 +671,22 @@ class SmashGame {
                 playerDiv.appendChild(stocksDiv);
 
                 hudContainer.appendChild(playerDiv);
+
+                this.hudCachedElements.push({
+                    playerDiv,
+                    damageSpan,
+                    nameSpan,
+                    stocksDiv
+                });
             });
         }
 
-        // Update existing elements in place
+        // Update existing elements in place using cached elements
         this.players.forEach((p, idx) => {
-            const playerDiv = hudContainer.children[idx];
-            if (!playerDiv) return;
+            const cached = this.hudCachedElements[idx];
+            if (!cached) return;
 
-            const damageSpan = playerDiv.querySelector('.hud-damage');
+            const damageSpan = cached.damageSpan;
             if (damageSpan) {
                 const targetDamageText = `${Math.floor(p.damage)}%`;
                 if (damageSpan.textContent !== targetDamageText) {
@@ -681,12 +695,12 @@ class SmashGame {
                 }
             }
 
-            const nameSpan = playerDiv.querySelector('.hud-name');
+            const nameSpan = cached.nameSpan;
             if (nameSpan && nameSpan.textContent !== p.name) {
                 nameSpan.textContent = p.name;
             }
 
-            const stocksDiv = playerDiv.querySelector('.hud-stocks');
+            const stocksDiv = cached.stocksDiv;
             if (stocksDiv) {
                 if (this.matchType === 'stocks') {
                     const dots = stocksDiv.children;
@@ -721,12 +735,39 @@ class SmashGame {
         });
     }
 
-    loop() {
+    loop(timestamp) {
         if (!this.running) return;
+
+        if (!timestamp) timestamp = performance.now();
+        let elapsed = timestamp - this.lastTime;
+        this.lastTime = timestamp;
+
+        // Cap elapsed time to prevent spiral of death if tab was inactive
+        if (elapsed > 1000) {
+            elapsed = 1000;
+        }
+
+        // Count down slow motion in real-time
+        if (this.slowMoActive) {
+            this.slowMoTimer--;
+            if (this.slowMoTimer <= 0) {
+                this.slowMoActive = false;
+                this.slowMoTarget = null;
+            }
+        }
+
+        this.accumulator += elapsed;
+        const dt = 1000 / 60; // 60 FPS physics updates
+        const effectiveDt = this.slowMoActive ? dt * 4 : dt; // 4x slower physics update in slow-mo
+
+        while (this.accumulator >= effectiveDt) {
+            this.update();
+            this.accumulator -= effectiveDt;
+        }
 
         this.render();
 
-        requestAnimationFrame(() => this.loop());
+        requestAnimationFrame((t) => this.loop(t));
     }
 
     update() {
@@ -937,6 +978,47 @@ class SmashGame {
 
         // Update HUD in real-time
         this.updateHUD();
+
+        // Check for dramatic slow-mo/zoom on final stock death
+        if (this.matchType === 'stocks' && !this.slowMoActive && this.mode !== 'training') {
+            this.players.forEach(p => {
+                if (p.stocks === 1 && !p.respawning) {
+                    // Check if this player's death would end the match (i.e. only 1 team or player left alive)
+                    let wouldEndGame = false;
+                    if (this.teamsEnabled) {
+                        const activeTeams = new Set(this.players.filter(pl => pl.stocks > 0 && !pl.respawning).map(pl => pl.team));
+                        if (activeTeams.size <= 2) {
+                            // If this player is the last one alive on their team
+                            const teamMatesAlive = this.players.filter(pl => pl.team === p.team && pl.stocks > 0 && !pl.respawning && pl.id !== p.id);
+                            if (teamMatesAlive.length === 0) {
+                                wouldEndGame = true;
+                            }
+                        }
+                    } else {
+                        const aliveCount = this.players.filter(pl => pl.stocks > 0 && !pl.respawning).length;
+                        if (aliveCount <= 2) {
+                            wouldEndGame = true;
+                        }
+                    }
+
+                    if (wouldEndGame) {
+                        // Check if they are flying off-stage with no hope of saving themselves
+                        const stageLeft = 100;
+                        const stageRight = V_WIDTH - 100;
+                        const isFlyingOut = (p.x < stageLeft && p.vx < -6) || 
+                                            (p.x > stageRight && p.vx > 6) || 
+                                            (p.y > V_HEIGHT - 100 && p.vy > 6) ||
+                                            (p.y < 50 && p.vy < -6);
+                        
+                        if (isFlyingOut) {
+                            this.slowMoActive = true;
+                            this.slowMoTarget = p;
+                            this.slowMoTimer = 90; // 90 frames of slow-mo (1.5 seconds real-time)
+                        }
+                    }
+                }
+            });
+        }
     }
 
     updatePlayer(p) {
@@ -1469,6 +1551,10 @@ class SmashGame {
     }
 
     handlePlayerOut(p) {
+        if (this.slowMoActive && this.slowMoTarget === p) {
+            this.slowMoActive = false;
+            this.slowMoTarget = null;
+        }
         createBlastParticles(Math.min(V_WIDTH, Math.max(0, p.x)), Math.min(V_HEIGHT, Math.max(0, p.y)), p.charData.color);
         playSynthSound('death');
         p.damage = 0; // Reset damage immediately upon death
@@ -1610,6 +1696,9 @@ class SmashGame {
 
     endMatch() {
         this.running = false;
+        this.slowMoActive = false;
+        this.slowMoTarget = null;
+        this.slowMoTimer = 0;
         if (this.updateInterval) {
             clearInterval(this.updateInterval);
             this.updateInterval = null;
@@ -1684,6 +1773,9 @@ class SmashGame {
             });
         }
 
+        if (typeof stopBattleMusic === 'function') {
+            stopBattleMusic();
+        }
         if (typeof playMenuMusic === 'function') {
             playMenuMusic();
         }
@@ -1698,6 +1790,23 @@ class SmashGame {
         const offsetTop = (this.canvas.height - V_HEIGHT * this.scale) / 2;
         this.ctx.translate(offsetLeft, offsetTop);
         this.ctx.scale(this.scale, this.scale);
+
+        if (this.slowMoActive && this.slowMoTarget) {
+            // Focus camera zoom (up to 2x zoom over 15 frames)
+            const progress = (90 - this.slowMoTimer) / 15;
+            const zoomFactor = 1.0 + Math.min(1.0, progress) * 1.2; // Zoom to 2.2x
+
+            let targetX = this.slowMoTarget.x + this.slowMoTarget.w / 2;
+            let targetY = this.slowMoTarget.y + this.slowMoTarget.h / 2;
+
+            // Keep camera center bounded so we don't look completely outside the virtual canvas
+            targetX = Math.max(150, Math.min(V_WIDTH - 150, targetX));
+            targetY = Math.max(150, Math.min(V_HEIGHT - 150, targetY));
+
+            this.ctx.translate(V_WIDTH / 2, V_HEIGHT / 2);
+            this.ctx.scale(zoomFactor, zoomFactor);
+            this.ctx.translate(-targetX, -targetY);
+        }
 
         // Render background grid/gradient highlights
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
@@ -1944,16 +2053,20 @@ class SmashGame {
                 this.ctx.lineTo(4, -6);
                 this.ctx.stroke();
             } else if (p.charData.name === "Sonic") {
-                // Neon energy daggers
-                this.ctx.strokeStyle = '#22c55e'; // Neon Green
-                this.ctx.lineWidth = 3;
-                this.ctx.shadowBlur = 10;
-                this.ctx.shadowColor = '#22c55e';
+                // Neon energy daggers (Optimized: dual stroke instead of shadowBlur)
+                this.ctx.strokeStyle = 'rgba(34, 197, 94, 0.35)'; // Glow base
+                this.ctx.lineWidth = 8;
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, 0);
                 this.ctx.lineTo(16, 4);
                 this.ctx.stroke();
-                this.ctx.shadowBlur = 0; // Reset
+
+                this.ctx.strokeStyle = '#22c55e'; // Neon Green core
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(16, 4);
+                this.ctx.stroke();
             } else if (p.charData.name === "Gordo") {
                 // Giant combat mallet/hammer
                 this.ctx.strokeStyle = '#78716c'; // Stone shaft

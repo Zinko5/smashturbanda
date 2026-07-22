@@ -44,7 +44,7 @@ try {
         const parsed = JSON.parse(saved);
         if (parsed.controls) controls = parsed.controls;
         if (parsed.volume !== undefined) {
-            sfxVolume = parsed.volume === 0.7 ? 0.15 : parsed.volume;
+            sfxVolume = (parsed.volume === 0.15 || parsed.volume === 0.7) ? 0.59 : parsed.volume;
             // slider value is synced in DOM when DOMContentLoaded fires
         }
     }

@@ -1,6 +1,6 @@
 // Web Audio API Context for Synthesis and Buffer Playback
 let audioCtx = null;
-let sfxVolume = 0.15;
+let sfxVolume = 0.5;
 
 // Audio buffer cache for preloaded effects (loaded & decoded in RAM)
 const audioBuffers = {};
@@ -37,6 +37,14 @@ async function preloadAudioFiles() {
     }
 }
 
+let battleMusic = null;
+const BATTLE_TRACKS = [
+    'sound/musica/batalla1.ogg',
+    'sound/musica/batalla2.ogg',
+    'sound/musica/batalla3.ogg',
+    'sound/musica/batalla4.ogg'
+];
+
 function playSynthSound(type) {
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') {
@@ -49,7 +57,8 @@ function playSynthSound(type) {
     gain.connect(audioCtx.destination);
 
     const now = audioCtx.currentTime;
-    gain.gain.setValueAtTime(sfxVolume * 0.4, now);
+    const vol = sfxVolume * sfxVolume; // Quadratic scaling for logarithmic volume perception
+    gain.gain.setValueAtTime(vol * 0.4, now);
 
     if (type === 'jump') {
         osc.type = 'triangle';
@@ -62,7 +71,7 @@ function playSynthSound(type) {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(400, now);
         osc.frequency.setValueAtTime(100, now + 0.05);
-        gain.gain.setValueAtTime(sfxVolume * 0.6, now);
+        gain.gain.setValueAtTime(vol * 0.6, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
         osc.start(now);
         osc.stop(now + 0.1);
@@ -70,7 +79,7 @@ function playSynthSound(type) {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(200, now);
         osc.frequency.exponentialRampToValueAtTime(60, now + 0.25);
-        gain.gain.setValueAtTime(sfxVolume * 0.8, now);
+        gain.gain.setValueAtTime(vol * 0.8, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
         osc.start(now);
         osc.stop(now + 0.3);
@@ -78,7 +87,7 @@ function playSynthSound(type) {
         osc.type = 'triangle';
         osc.frequency.setValueAtTime(120, now);
         osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
-        gain.gain.setValueAtTime(sfxVolume * 0.35, now);
+        gain.gain.setValueAtTime(vol * 0.35, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
         osc.start(now);
         osc.stop(now + 0.25);
@@ -86,7 +95,7 @@ function playSynthSound(type) {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(800, now);
         osc.frequency.linearRampToValueAtTime(400, now + 0.1);
-        gain.gain.setValueAtTime(sfxVolume * 0.3, now);
+        gain.gain.setValueAtTime(vol * 0.3, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
         osc.start(now);
         osc.stop(now + 0.1);
@@ -95,7 +104,7 @@ function playSynthSound(type) {
         osc.frequency.setValueAtTime(880, now);
         osc.frequency.setValueAtTime(440, now + 0.08);
         osc.frequency.setValueAtTime(220, now + 0.16);
-        gain.gain.setValueAtTime(sfxVolume * 0.6, now);
+        gain.gain.setValueAtTime(vol * 0.6, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
         osc.start(now);
         osc.stop(now + 0.3);
@@ -103,7 +112,7 @@ function playSynthSound(type) {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(600, now);
         osc.frequency.linearRampToValueAtTime(50, now + 0.6);
-        gain.gain.setValueAtTime(sfxVolume * 0.8, now);
+        gain.gain.setValueAtTime(vol * 0.8, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
         osc.start(now);
         osc.stop(now + 0.6);
@@ -111,7 +120,7 @@ function playSynthSound(type) {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(300, now);
         osc.frequency.exponentialRampToValueAtTime(900, now + 0.1);
-        gain.gain.setValueAtTime(sfxVolume * 0.2, now);
+        gain.gain.setValueAtTime(vol * 0.2, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
         osc.start(now);
         osc.stop(now + 0.1);
@@ -125,11 +134,12 @@ function playSoundFile(filePath, durationMs = null) {
     }
 
     const buffer = audioBuffers[filePath];
+    const vol = sfxVolume * sfxVolume; // Quadratic scaling for logarithmic volume perception
     if (!buffer) {
         // Fallback to HTML5 audio if not decoded yet
         try {
             const audio = new Audio(filePath);
-            audio.volume = sfxVolume;
+            audio.volume = vol;
             audio.play().catch(e => console.warn("Failed to play sound file fallback:", e));
             if (durationMs) {
                 setTimeout(() => {
@@ -153,7 +163,7 @@ function playSoundFile(filePath, durationMs = null) {
         const source = audioCtx.createBufferSource();
         source.buffer = buffer;
         const gainNode = audioCtx.createGain();
-        gainNode.gain.setValueAtTime(sfxVolume, audioCtx.currentTime);
+        gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
         source.connect(gainNode);
         gainNode.connect(audioCtx.destination);
         source.start(0);
@@ -176,11 +186,12 @@ let menuMusic = null;
 
 function playMenuMusic() {
     try {
+        stopBattleMusic(); // Ensure battle music is stopped when menu music plays
         if (!menuMusic) {
             menuMusic = new Audio('sound/musica/main-theme.mp3');
             menuMusic.loop = true;
         }
-        menuMusic.volume = sfxVolume;
+        menuMusic.volume = sfxVolume * sfxVolume; // Quadratic scaling
         if (menuMusic.paused) {
             menuMusic.play().catch(e => {
                 console.warn("Autoplay prevented for menu music:", e);
@@ -198,9 +209,43 @@ function stopMenuMusic() {
     }
 }
 
+function playBattleMusic() {
+    try {
+        stopMenuMusic(); // Ensure menu music is stopped when battle music plays
+        stopBattleMusic();
+        const randomTrack = BATTLE_TRACKS[Math.floor(Math.random() * BATTLE_TRACKS.length)];
+        battleMusic = new Audio(randomTrack);
+        battleMusic.loop = false; // Do not loop the same song forever
+        battleMusic.volume = sfxVolume * sfxVolume; // Quadratic scaling
+        
+        // When the song ends, play another random one
+        battleMusic.addEventListener('ended', () => {
+            playBattleMusic();
+        });
+
+        battleMusic.play().catch(e => {
+            console.warn("Autoplay prevented for battle music:", e);
+        });
+    } catch (e) {
+        console.warn("Error playing battle music:", e);
+    }
+}
+
+function stopBattleMusic() {
+    if (battleMusic) {
+        battleMusic.pause();
+        battleMusic.currentTime = 0;
+        battleMusic = null;
+    }
+}
+
 function updateMenuMusicVolume() {
+    const vol = sfxVolume * sfxVolume;
     if (menuMusic) {
-        menuMusic.volume = sfxVolume;
+        menuMusic.volume = vol;
+    }
+    if (battleMusic) {
+        battleMusic.volume = vol;
     }
 }
 
@@ -227,7 +272,7 @@ function enableMenuMusicOnInteraction() {
             menuMusic = new Audio('sound/musica/main-theme.mp3');
             menuMusic.loop = true;
         }
-        menuMusic.volume = sfxVolume;
+        menuMusic.volume = sfxVolume * sfxVolume; // Quadratic scaling
         menuMusic.play().then(() => {
             // Autoplay succeeded, but still bind interaction to preload SFX
             const preloadOnAction = () => {
