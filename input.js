@@ -43,9 +43,19 @@ try {
     if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.controls) controls = parsed.controls;
-        if (parsed.volume !== undefined) {
-            sfxVolume = (parsed.volume === 0.15 || parsed.volume === 0.7) ? 0.59 : parsed.volume;
-            // slider value is synced in DOM when DOMContentLoaded fires
+        
+        if (parsed.masterVolume !== undefined) {
+            masterVolume = parsed.masterVolume;
+        } else if (parsed.volume !== undefined) {
+            masterVolume = parsed.volume;
+        }
+        
+        if (parsed.musicVolume !== undefined) {
+            musicVolume = parsed.musicVolume;
+        }
+        
+        if (parsed.sfxVolume !== undefined) {
+            sfxVolume = parsed.sfxVolume;
         }
     }
 } catch (e) {
@@ -64,10 +74,18 @@ window.addEventListener('keyup', (e) => {
     keysPressed[e.code] = false;
 });
 
-// Update DOM slider value once loaded
+// Update DOM slider values once loaded
 document.addEventListener('DOMContentLoaded', () => {
-    const slider = document.getElementById('slider-sfx');
-    if (slider) {
-        slider.value = sfxVolume;
+    const sliderFloating = document.getElementById('volume-range-floating');
+    if (sliderFloating) {
+        sliderFloating.value = masterVolume;
+    }
+    const sliderMusic = document.getElementById('slider-music');
+    if (sliderMusic) {
+        sliderMusic.value = musicVolume;
+    }
+    const sliderSfx = document.getElementById('slider-sfx');
+    if (sliderSfx) {
+        sliderSfx.value = sfxVolume;
     }
 });

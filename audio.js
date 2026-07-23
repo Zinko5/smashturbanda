@@ -1,5 +1,7 @@
 // Web Audio API Context for Synthesis and Buffer Playback
 let audioCtx = null;
+let masterVolume = 0.5;
+let musicVolume = 0.5;
 let sfxVolume = 0.5;
 
 // Audio buffer cache for preloaded effects (loaded & decoded in RAM)
@@ -57,7 +59,8 @@ function playSynthSound(type) {
     gain.connect(audioCtx.destination);
 
     const now = audioCtx.currentTime;
-    const vol = sfxVolume * sfxVolume; // Quadratic scaling for logarithmic volume perception
+    const finalVol = sfxVolume * masterVolume;
+    const vol = finalVol * finalVol; // Quadratic scaling for logarithmic volume perception
     gain.gain.setValueAtTime(vol * 0.4, now);
 
     if (type === 'jump') {
@@ -134,7 +137,8 @@ function playSoundFile(filePath, durationMs = null) {
     }
 
     const buffer = audioBuffers[filePath];
-    const vol = sfxVolume * sfxVolume; // Quadratic scaling for logarithmic volume perception
+    const finalVol = sfxVolume * masterVolume;
+    const vol = finalVol * finalVol; // Quadratic scaling for logarithmic volume perception
     if (!buffer) {
         // Fallback to HTML5 audio if not decoded yet
         try {
@@ -191,7 +195,8 @@ function playMenuMusic() {
             menuMusic = new Audio('sound/musica/main-theme.mp3');
             menuMusic.loop = true;
         }
-        menuMusic.volume = sfxVolume * sfxVolume; // Quadratic scaling
+        const finalMusicVol = musicVolume * masterVolume;
+        menuMusic.volume = finalMusicVol * finalMusicVol; // Quadratic scaling
         if (menuMusic.paused) {
             menuMusic.play().catch(e => {
                 console.warn("Autoplay prevented for menu music:", e);
@@ -199,6 +204,26 @@ function playMenuMusic() {
         }
     } catch (e) {
         console.warn("Error playing menu music:", e);
+    }
+}
+
+function playTerranovaVictoryMusic() {
+    try {
+        stopMenuMusic();
+        stopBattleMusic();
+        menuMusic = new Audio('sound/musica/terranova.mp3');
+        menuMusic.loop = false;
+        const finalMusicVol = musicVolume * masterVolume;
+        menuMusic.volume = finalMusicVol * finalMusicVol;
+        menuMusic.addEventListener('ended', () => {
+            menuMusic = null;
+            playMenuMusic();
+        });
+        menuMusic.play().catch(e => {
+            console.warn("Autoplay prevented for Terranova victory music:", e);
+        });
+    } catch (e) {
+        console.warn("Error playing Terranova victory music:", e);
     }
 }
 
@@ -216,7 +241,8 @@ function playBattleMusic() {
         const randomTrack = BATTLE_TRACKS[Math.floor(Math.random() * BATTLE_TRACKS.length)];
         battleMusic = new Audio(randomTrack);
         battleMusic.loop = false; // Do not loop the same song forever
-        battleMusic.volume = sfxVolume * sfxVolume; // Quadratic scaling
+        const finalMusicVol = musicVolume * masterVolume;
+        battleMusic.volume = finalMusicVol * finalMusicVol; // Quadratic scaling
         
         // When the song ends, play another random one
         battleMusic.addEventListener('ended', () => {
@@ -240,7 +266,8 @@ function stopBattleMusic() {
 }
 
 function updateMenuMusicVolume() {
-    const vol = sfxVolume * sfxVolume;
+    const finalMusicVol = musicVolume * masterVolume;
+    const vol = finalMusicVol * finalMusicVol;
     if (menuMusic) {
         menuMusic.volume = vol;
     }
@@ -272,7 +299,8 @@ function enableMenuMusicOnInteraction() {
             menuMusic = new Audio('sound/musica/main-theme.mp3');
             menuMusic.loop = true;
         }
-        menuMusic.volume = sfxVolume * sfxVolume; // Quadratic scaling
+        const finalMusicVol = musicVolume * masterVolume;
+        menuMusic.volume = finalMusicVol * finalMusicVol; // Quadratic scaling
         menuMusic.play().then(() => {
             // Autoplay succeeded, but still bind interaction to preload SFX
             const preloadOnAction = () => {

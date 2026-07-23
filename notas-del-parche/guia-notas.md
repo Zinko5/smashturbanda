@@ -18,7 +18,7 @@ Se distinguen dos tipos de versiones:
 
 Cada parche final (`cc`) tendrá **un único archivo `.md`** en `notas-del-parche/finales/` nombrado como `aa.bb.cc.md` (ejemplo: `notas-del-parche/finales/26.07.01.md`).
 
-Dentro de este archivo se irán apilando los miniparches (`dd`) del más reciente al más antiguo. Cada bloque `dd` debe contener:
+Dentro de este archivo se irán apilando los miniparches (`dd`) del más antiguo al más reciente. Cada bloque `dd` debe contener:
 
 1. **Nuevas características o funciones** (incluye *buffs* o *nerfs*)
 2. **Correcciones de bugs antiguos**

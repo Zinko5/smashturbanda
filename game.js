@@ -45,7 +45,8 @@ const PHENOTYPES = {
         speed: 4.2,
         jumpForce: 11.5,
         doubleJumpForce: 10.0,
-        baseDamage: 1.2
+        baseDamage: 1.2,
+        damageReceivedMultiplier: 1.067
     }
 };
 
@@ -189,6 +190,90 @@ const CHARACTERS = {
                 playSynthSound('jump');
             }
         }
+    },
+    blitzcrank: {
+        name: "Blitzcrank",
+        phenotype: "pesado",
+        color: "#fbbf24", // Yellow
+        colorAlt: "#d97706",
+        width: 34,
+        height: 52,
+        specials: {
+            neutral: (p) => { },
+            up: (p) => {
+                p.vy = -13;
+                p.vx = p.facing * 2;
+                p.shieldStun = 20;
+                playSynthSound('jump');
+            }
+        }
+    },
+    yone: {
+        name: "Yone",
+        phenotype: "balanceado",
+        color: "#ef4444", // Red
+        colorAlt: "#7f1d1d",
+        width: 30,
+        height: 48,
+        specials: {
+            neutral: (p) => { },
+            up: (p) => {
+                p.vy = -14;
+                p.vx = p.facing * 4;
+                p.shieldStun = 18;
+                playSynthSound('jump');
+            }
+        }
+    },
+    bomberman: {
+        name: "Bomberman",
+        phenotype: "ligero",
+        color: "#f8fafc", // White
+        colorAlt: "#94a3b8",
+        width: 28,
+        height: 44,
+        specials: {
+            neutral: (p) => { },
+            up: (p) => {
+                p.vy = -15;
+                p.shieldStun = 15;
+                playSynthSound('jump');
+                gameEngine.triggerExplosion(p.x + p.w / 2, p.y + p.h + 10, p.id, 40);
+            }
+        }
+    },
+    terranova: {
+        name: "Terranova",
+        phenotype: "balanceado",
+        color: "#78350f", // Brown
+        colorAlt: "#451a03",
+        width: 32,
+        height: 50,
+        specials: {
+            neutral: (p) => { },
+            up: (p) => {
+                p.vy = -13;
+                p.shieldStun = 20;
+                playSynthSound('jump');
+            }
+        }
+    },
+    sett: {
+        name: "Sett",
+        phenotype: "pesado",
+        color: "#dc2626", // Dark Red
+        colorAlt: "#991b1b",
+        width: 32,
+        height: 50,
+        specials: {
+            neutral: (p) => { },
+            up: (p) => {
+                p.vy = -14;
+                p.vx = p.facing * 3;
+                p.shieldStun = 22;
+                playSynthSound('jump');
+            }
+        }
     }
 };
 
@@ -202,6 +287,7 @@ Object.keys(CHARACTERS).forEach(key => {
         char.jumpForce = pheno.jumpForce;
         char.doubleJumpForce = pheno.doubleJumpForce;
         char.baseDamage = pheno.baseDamage;
+        char.damageReceivedMultiplier = pheno.damageReceivedMultiplier || 1.0;
     }
 });
 
@@ -283,6 +369,23 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
             applyHit(attacker, opponent, damage);
         }
     });
+
+    // Also damage breakable platforms in range
+    gameEngine.platforms.forEach(plat => {
+        if (plat.terrainType === 'rompible' && !plat.broken) {
+            if (checkAABBCollision(hitbox, plat)) {
+                plat.hp -= damage;
+                if (plat.hp <= 0) {
+                    plat.broken = true;
+                    plat.respawnTimer = 640; // 10.67s * 60fps = 640 ticks
+                    playSynthSound('heavy_hit');
+                    createBlastParticles(plat.x + plat.w/2, plat.y + plat.h/2, '#78716c'); // stone grey
+                } else {
+                    playSynthSound('hit');
+                }
+            }
+        }
+    });
 }
 
 function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW, customH) {
@@ -309,7 +412,7 @@ function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW,
     gameEngine.projectiles.push(proj);
 }
 
-function applyHit(attacker, victim, damage, explosionSource = null) {
+function applyHit(attacker, victim, damage, explosionSource = null, kbMultiplier = 1.0) {
     if (victim.shieldActive && victim.shieldStrength > 10) {
         // Shield absorbs hit
         victim.shieldStrength -= damage * 1.5;
@@ -327,12 +430,23 @@ function applyHit(attacker, victim, damage, explosionSource = null) {
     if (attacker && attacker.charData && attacker.charData.baseDamage !== undefined) {
         finalDamage = Math.round(damage * attacker.charData.baseDamage);
     }
+    // Apply phenotype damageReceivedMultiplier scaling for the victim
+    if (victim.charData && victim.charData.damageReceivedMultiplier !== undefined) {
+        finalDamage = Math.round(finalDamage * victim.charData.damageReceivedMultiplier);
+    }
 
     playSynthSound(finalDamage > 12 ? 'heavy_hit' : 'hit');
     victim.damage += finalDamage;
+    victim.consecutiveBounces = 0;
+
+    // Yone Soul Damage Accumulation
+    if (attacker && attacker.charData && attacker.charData.name === "Yone" && attacker.yoneSoulActive) {
+        victim.yoneMarkedBy = attacker.id;
+        victim.yoneDamageAccumulated = (victim.yoneDamageAccumulated || 0) + finalDamage;
+    }
 
     // Fixed proportion relationship: base knockback is 0.8x of final damage
-    const baseKnockback = finalDamage * 0.8;
+    const baseKnockback = finalDamage * 0.8 * kbMultiplier;
     // Damage percentages only act as multipliers of that damage/knockback
     const multiplier = 1 + (victim.damage / 100);
     const kbForce = (baseKnockback * multiplier) * (100 / victim.charData.weight);
@@ -364,18 +478,130 @@ function applyHit(attacker, victim, damage, explosionSource = null) {
     victim.lastHitBy = attacker.id;
 }
 
+function returnYoneToBody(p) {
+    if (!p.yoneSoulActive || p.yoneReturning) return;
+    p.yoneReturning = true;
+    p.invulnerable = 15;
+    playSynthSound('jump');
+}
+
+function completeYoneReturn(p) {
+    p.yoneSoulActive = false;
+
+    p.vx = 0;
+    p.vy = 0;
+    p.invulnerable = 15; // brief invulnerability on return
+
+    playSynthSound('explosion');
+
+    // Handle marked enemies
+    gameEngine.players.forEach(opp => {
+        if (opp.yoneMarkedBy === p.id) {
+            const accumulated = opp.yoneDamageAccumulated || 0;
+            const extraDamage = Math.round(accumulated * 0.1567);
+            if (extraDamage > 0) {
+                applyHit(p, opp, extraDamage);
+
+                // Push/knockback marked enemies
+                const kbForce = (extraDamage * 0.8 * (1 + opp.damage / 100)) * (100 / opp.charData.weight);
+                const pushAngle = p.facing === 1 ? -Math.PI / 6 : -5 * Math.PI / 6;
+                opp.vx = Math.cos(pushAngle) * kbForce * 1.2;
+                opp.vy = Math.sin(pushAngle) * kbForce * 0.9;
+                opp.hitStun = Math.max(15, Math.floor(kbForce * 2.5));
+            }
+            opp.yoneMarkedBy = null;
+            opp.yoneDamageAccumulated = 0;
+        }
+    });
+
+    p.yoneCooldown = 340; // 5.67s cooldown
+}
+
+
+
+function fireBlitzcrankHook(p, progress, keys) {
+    const dmg = Math.round(3 + progress * 4);
+    const speed = 12 + progress * 8;
+    const maxRange = 150 + progress * 400;
+
+    let dirX = p.facing;
+    let dirY = 0;
+    if (keys.up) {
+        dirY = -1;
+    } else if (keys.down) {
+        dirY = 1;
+    }
+    if (keys.left) {
+        dirX = -1;
+    } else if (keys.right) {
+        dirX = 1;
+    }
+
+    const len = Math.sqrt(dirX * dirX + dirY * dirY);
+    const vx = (dirX / len) * speed;
+    const vy = (dirY / len) * speed;
+
+    shootProjectile(p, 'hook', vx, vy, dmg, 0, 18, 18);
+
+    const lastProj = gameEngine.projectiles[gameEngine.projectiles.length - 1];
+    if (lastProj && lastProj.type === 'hook') {
+        lastProj.startX = lastProj.x;
+        lastProj.startY = lastProj.y;
+        lastProj.maxRange = maxRange;
+        lastProj.returning = false;
+        lastProj.grabbedPlayerId = null;
+        lastProj.life = 180;
+    }
+
+    p.blitzcrankCooldown = 160;
+    p.blitzcrankCharge = 0;
+}
+
+function getPlayerCooldownProgress(p) {
+    let current = 0;
+    let max = 1;
+    
+    if (p.charData.name === "Mago") {
+        current = p.balanceadoCooldown || 0;
+        max = 40;
+    } else if (p.charData.name === "Palomo") {
+        current = p.voladorBombCooldown || 0;
+        max = 30;
+    } else if (p.charData.name === "Gordo") {
+        current = p.gordoCooldown || 0;
+        max = 40;
+    } else if (p.charData.name === "Blitzcrank") {
+        current = p.blitzcrankCooldown || 0;
+        max = 160;
+    } else if (p.charData.name === "Yone") {
+        current = p.yoneCooldown || 0;
+        max = 340;
+    } else if (p.charData.name === "Bomberman") {
+        current = p.bombermanCooldown || 0;
+        max = 94;
+    } else if (p.charData.name === "Terranova") {
+        current = p.terranovaCooldown || 0;
+        max = 112;
+    } else if (p.charData.name === "Sett") {
+        current = p.settCooldown || 0;
+        max = 136;
+    }
+    
+    return { current, max };
+}
+
 // Particle effect on death / launch
-function createBlastParticles(x, y, color) {
-    for (let i = 0; i < 20; i++) {
+function createBlastParticles(x, y, color, customCount = 20, customScale = 1.0) {
+    for (let i = 0; i < customCount; i++) {
         gameEngine.particles.push({
             x: x,
             y: y,
-            vx: (Math.random() - 0.5) * 15,
-            vy: (Math.random() - 0.5) * 15,
-            radius: Math.random() * 5 + 3,
+            vx: (Math.random() - 0.5) * 15 * customScale,
+            vy: (Math.random() - 0.5) * 15 * customScale,
+            radius: (Math.random() * 5 + 3) * customScale,
             color: color,
             alpha: 1,
-            life: 60
+            life: Math.round(60 * customScale)
         });
     }
 }
@@ -410,6 +636,42 @@ class SmashGame {
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
+
+        // Background Web Worker to prevent tab freezing
+        const workerCode = `
+            let timer = null;
+            self.onmessage = function(e) {
+                if (e.data === 'start') {
+                    if (timer) clearInterval(timer);
+                    timer = setInterval(() => {
+                        self.postMessage('tick');
+                    }, 16.67);
+                } else if (e.data === 'stop') {
+                    if (timer) {
+                        clearInterval(timer);
+                        timer = null;
+                    }
+                }
+            };
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        this.worker = new Worker(URL.createObjectURL(blob));
+        this.worker.onmessage = (e) => {
+            if (e.data === 'tick' && document.hidden && this.running) {
+                this.loop(performance.now());
+            }
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (this.running) {
+                if (document.hidden) {
+                    this.worker.postMessage('start');
+                } else {
+                    this.worker.postMessage('stop');
+                    requestAnimationFrame((t) => this.loop(t));
+                }
+            }
+        });
     }
 
     resize() {
@@ -421,7 +683,7 @@ class SmashGame {
         this.scale = Math.min(scaleX, scaleY);
     }
 
-    triggerExplosion(x, y, attackerId, radius = 110) {
+    triggerExplosion(x, y, attackerId, radius = 110, excludePlayerId = null) {
         playSynthSound('explosion');
         // Spawn explosion particles based on size
         const numParticles = Math.round(15 * (radius / 110));
@@ -446,7 +708,7 @@ class SmashGame {
         const coreDamage = Math.round(1.4 * Math.sqrt(radius));
 
         this.players.forEach(opponent => {
-            if (opponent.id === attackerId || opponent.respawning || opponent.invulnerable > 0) return;
+            if (opponent.id === attackerId || opponent.id === excludePlayerId || opponent.respawning || opponent.invulnerable > 0) return;
             if (this.teamsEnabled && opponent.team && attacker && attacker.team && opponent.team === attacker.team) return;
 
             const oppRect = { x: opponent.x, y: opponent.y, w: opponent.w, h: opponent.h };
@@ -461,6 +723,29 @@ class SmashGame {
                     const finalDamage = Math.round(coreDamage * proximityFactor);
                     if (finalDamage > 0) {
                         applyHit(attacker || { id: attackerId, x: x }, opponent, finalDamage, { x, y });
+                    }
+                }
+            }
+        });
+
+        // Explosion damages breakable platforms in range
+        this.platforms.forEach(plat => {
+            if (plat.terrainType === 'rompible' && !plat.broken) {
+                const platCenterX = plat.x + plat.w / 2;
+                const platCenterY = plat.y + plat.h / 2;
+                const dx = platCenterX - x;
+                const dy = platCenterY - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= radius) {
+                    const proximityFactor = 1 - (distance / radius);
+                    const finalDamage = Math.round(coreDamage * proximityFactor);
+                    if (finalDamage > 0) {
+                        plat.hp -= finalDamage;
+                        if (plat.hp <= 0) {
+                            plat.broken = true;
+                            plat.respawnTimer = 640; // 10.67s * 60fps = 640 ticks
+                            createBlastParticles(plat.x + plat.w/2, plat.y + plat.h/2, '#78716c'); // stone grey
+                        }
                     }
                 }
             }
@@ -537,6 +822,18 @@ class SmashGame {
         // Load Stage Platforms
         const stageConfig = STAGES[stageKey];
         this.platforms = JSON.parse(JSON.stringify(stageConfig.platforms));
+        this.platforms.forEach(plat => {
+            if (plat.terrainType === undefined) {
+                if (plat.semi) plat.terrainType = 'traspasable';
+                else plat.terrainType = 'duro';
+            }
+            if (plat.terrainType === 'rompible') {
+                if (plat.maxHp === undefined) plat.maxHp = 30;
+                plat.hp = plat.maxHp;
+                plat.broken = false;
+                plat.respawnTimer = 0;
+            }
+        });
 
         // Spawn players dynamically
         this.players = playersConfig.map((pConfig, idx) => {
@@ -767,7 +1064,9 @@ class SmashGame {
 
         this.render();
 
-        requestAnimationFrame((t) => this.loop(t));
+        if (!document.hidden) {
+            requestAnimationFrame((t) => this.loop(t));
+        }
     }
 
     update() {
@@ -790,16 +1089,71 @@ class SmashGame {
         }
 
         // Update platforms
-        this.platforms.forEach(p => {
-            if (p.moving) {
-                p.y += p.speedY * p.dirY;
-                if (p.y >= p.rangeY[1]) {
-                    p.dirY = -1;
-                } else if (p.y <= p.rangeY[0]) {
-                    p.dirY = 1;
+        for (let i = this.platforms.length - 1; i >= 0; i--) {
+            const plat = this.platforms[i];
+            
+            // Handle breakable platform respawn ticking
+            if (plat.terrainType === 'rompible' && plat.broken) {
+                plat.respawnTimer--;
+                if (plat.respawnTimer <= 0) {
+                    plat.broken = false;
+                    plat.hp = plat.maxHp || 30;
+                    playSynthSound('shield'); // shield sound for respawning/solidifying
+                    createBlastParticles(plat.x + plat.w/2, plat.y + plat.h/2, '#94a3b8');
                 }
             }
-        });
+
+            if (plat.isWall) {
+                // Emerging animation and delay handling
+                if (plat.spawnDelay > 0) {
+                    plat.spawnDelay--;
+                    plat.h = 1;
+                    plat.y = plat.originY + plat.targetHeight - 1;
+                } else if (plat.h < plat.targetHeight) {
+                    const growSpeed = 15;
+                    plat.h = Math.min(plat.targetHeight, plat.h + growSpeed);
+                    plat.y = plat.originY + plat.targetHeight - plat.h;
+
+                    if (plat.h >= plat.targetHeight) {
+                        plat.fullyEmerged = true;
+                    }
+
+                    // Apply hit to overlapping players as it rises
+                    this.players.forEach(opp => {
+                        if (opp.id !== plat.ownerId && !opp.respawning && opp.invulnerable <= 0) {
+                            const oppRect = { x: opp.x, y: opp.y, w: opp.w, h: opp.h };
+                            if (checkAABBCollision(plat, oppRect)) {
+                                const damage = plat.damage || 12;
+                                applyHit(this.players.find(p => p.id === plat.ownerId) || opp, opp, damage);
+                                opp.vy = -14;
+                                opp.vx = (opp.x + opp.w/2 < plat.x + plat.w/2) ? -6 : 6;
+                            }
+                        }
+                    });
+                }
+
+                // Decrement life only after emerging fully
+                if (plat.spawnDelay <= 0 && plat.h >= plat.targetHeight) {
+                    plat.life--;
+                }
+
+                if (plat.life <= 0) {
+                    this.players.forEach(pl => {
+                        if (pl.terranovaWall === plat) {
+                            pl.terranovaWall = null;
+                        }
+                    });
+                    this.platforms.splice(i, 1);
+                }
+            } else if (plat.moving) {
+                plat.y += plat.speedY * plat.dirY;
+                if (plat.y >= plat.rangeY[1]) {
+                    plat.dirY = -1;
+                } else if (plat.y <= plat.rangeY[0]) {
+                    plat.dirY = 1;
+                }
+            }
+        }
 
         // Update Players
         this.players.forEach(p => {
@@ -918,12 +1272,86 @@ class SmashGame {
         // Update Projectiles
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const pr = this.projectiles[i];
+            const attackerPlayer = this.players.find(p => p.id === pr.attackerId);
+
+            if (pr.type === 'bomberman_bomb') {
+                pr.vy = Math.min(10, pr.vy + 0.35);
+            }
+
+            if (pr.type === 'hook' && pr.returning) {
+                if (attackerPlayer) {
+                    const targetX = attackerPlayer.x + attackerPlayer.w / 2;
+                    const targetY = attackerPlayer.y + attackerPlayer.h / 2;
+                    const returnDx = targetX - (pr.x + pr.w / 2);
+                    const returnDy = targetY - (pr.y + pr.h / 2);
+                    const returnDist = Math.sqrt(returnDx * returnDx + returnDy * returnDy);
+                    if (returnDist < 25) {
+                        if (pr.grabbedPlayerId) {
+                            const victim = this.players.find(pl => pl.id === pr.grabbedPlayerId);
+                            if (victim) {
+                                victim.x = attackerPlayer.x + attackerPlayer.facing * 35;
+                                victim.y = attackerPlayer.y;
+                                victim.vx = 0;
+                                victim.vy = 0;
+                                victim.hitStun = 10;
+                            }
+                        }
+                        pr.life = 0; // mark inactive
+                    } else {
+                        const returnSpeed = 18;
+                        pr.vx = (returnDx / returnDist) * returnSpeed;
+                        pr.vy = (returnDy / returnDist) * returnSpeed;
+                    }
+                } else {
+                    pr.life = 0;
+                }
+            }
+
             pr.x += pr.vx;
             pr.y += pr.vy;
             pr.life--;
 
+            if (pr.type === 'hook' && !pr.returning) {
+                const dx = pr.x - pr.startX;
+                const dy = pr.y - pr.startY;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                if (distance >= pr.maxRange) {
+                    pr.returning = true;
+                    pr.vx = 0;
+                    pr.vy = 0;
+                }
+            }
+
+            // Drag grabbed player along
+            if (pr.type === 'hook' && pr.returning && pr.grabbedPlayerId) {
+                const victim = this.players.find(pl => pl.id === pr.grabbedPlayerId);
+                if (victim) {
+                    if (victim.respawning || victim.stocks <= 0) {
+                        pr.grabbedPlayerId = null;
+                    } else {
+                        victim.x = pr.x + pr.w / 2 - victim.w / 2;
+                        victim.y = pr.y + pr.h / 2 - victim.h / 2;
+                        victim.vx = 0;
+                        victim.vy = 0;
+                        victim.hitStun = 5;
+                    }
+                }
+            }
+
             // Check collision with stage/screen bounds or oponent
-            let active = pr.life > 0 && pr.x > 0 && pr.x < V_WIDTH && pr.y > 0 && pr.y < V_HEIGHT;
+            let active = pr.life > 0 && pr.x > -200 && pr.x < V_WIDTH + 200 && pr.y > -200 && pr.y < V_HEIGHT + 200;
+
+            if (active && pr.type === 'bomberman_bomb') {
+                for (let plat of this.platforms) {
+                    const platRect = { x: plat.x, y: plat.y, w: plat.w, h: plat.h };
+                    if (checkAABBCollision(pr, platRect)) {
+                        pr.y = plat.y - pr.h;
+                        pr.vy = 0;
+                        pr.vx = 0;
+                        break;
+                    }
+                }
+            }
 
             if (active && (pr.type === 'bomb' || pr.type === 'fireball')) {
                 for (let plat of this.platforms) {
@@ -941,7 +1369,6 @@ class SmashGame {
                 // Collide with any opponent
                 for (let pl of this.players) {
                     if (pl.id !== pr.attackerId && !pl.respawning && pl.invulnerable <= 0) {
-                        const attackerPlayer = this.players.find(p => p.id === pr.attackerId);
                         if (this.teamsEnabled && attackerPlayer && pl.team && attackerPlayer.team && pl.team === attackerPlayer.team) continue;
 
                         const victimRect = { x: pl.x, y: pl.y, w: pl.w, h: pl.h };
@@ -949,14 +1376,32 @@ class SmashGame {
                             if (pr.type === 'bomb' || pr.type === 'fireball') {
                                 const radius = Math.round(pr.w * 4.2);
                                 this.triggerExplosion(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.attackerId, radius);
+                            } else if (pr.type === 'hook') {
+                                if (!pr.returning) {
+                                    applyHit(attackerPlayer, pl, pr.damage);
+                                    pr.returning = true;
+                                    pr.grabbedPlayerId = pl.id;
+                                    pr.vx = 0;
+                                    pr.vy = 0;
+                                    createBlastParticles(pl.x, pl.y, '#eab308');
+                                }
+                            } else if (pr.type === 'bomberman_bomb') {
+                                continue;
                             } else {
                                 applyHit(attackerPlayer, pl, pr.damage);
                             }
-                            active = false;
+                            if (pr.type !== 'hook') {
+                                active = false;
+                            }
                             break;
                         }
                     }
                 }
+            }
+
+            if (pr.type === 'bomberman_bomb' && pr.life <= 0) {
+                this.triggerExplosion(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.attackerId, pr.explosionRadius || 80);
+                active = false;
             }
 
             if (!active) {
@@ -1005,11 +1450,11 @@ class SmashGame {
                         // Check if they are flying off-stage with no hope of saving themselves
                         const stageLeft = 100;
                         const stageRight = V_WIDTH - 100;
-                        const isFlyingOut = (p.x < stageLeft && p.vx < -6) || 
-                                            (p.x > stageRight && p.vx > 6) || 
-                                            (p.y > V_HEIGHT - 100 && p.vy > 6) ||
-                                            (p.y < 50 && p.vy < -6);
-                        
+                        const isFlyingOut = (p.x < stageLeft && p.vx < -6) ||
+                            (p.x > stageRight && p.vx > 6) ||
+                            (p.y > V_HEIGHT - 100 && p.vy > 6) ||
+                            (p.y < 50 && p.vy < -6);
+
                         if (isFlyingOut) {
                             this.slowMoActive = true;
                             this.slowMoTarget = p;
@@ -1048,6 +1493,30 @@ class SmashGame {
             return;
         }
 
+        // Yone Returning Rapid Displacement Loop
+        if (p.charData.name === "Yone" && p.yoneReturning) {
+            p.invulnerable = Math.max(p.invulnerable, 2);
+            const dx = p.yoneBodyX - p.x;
+            const dy = p.yoneBodyY - p.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            const speed = 45; // 45px/frame displacement speed
+            if (dist <= speed) {
+                p.x = p.yoneBodyX;
+                p.y = p.yoneBodyY;
+                p.vx = 0;
+                p.vy = 0;
+                p.yoneReturning = false;
+                completeYoneReturn(p);
+            } else {
+                p.vx = (dx / dist) * speed;
+                p.vy = (dy / dist) * speed;
+                p.x += p.vx;
+                p.y += p.vy;
+            }
+            return; // skip standard inputs/gravity/physics
+        }
+
         // Decr hit stun & shield stun
         if (p.hitStun > 0) p.hitStun--;
         if (p.shieldStun > 0) p.shieldStun--;
@@ -1059,7 +1528,8 @@ class SmashGame {
                 p.comboCount = 0;
             }
         }
-
+        if (p.ignoreSemiPlatformsTimer === undefined) p.ignoreSemiPlatformsTimer = 0;
+        if (p.ignoreSemiPlatformsTimer > 0) p.ignoreSemiPlatformsTimer--;
         if (p.balanceadoCooldown === undefined) p.balanceadoCooldown = 0;
         if (p.balanceadoCharge === undefined) p.balanceadoCharge = 0;
         if (p.gordoCooldown === undefined) p.gordoCooldown = 0;
@@ -1073,8 +1543,39 @@ class SmashGame {
         if (p.velozDashSpeed === undefined) p.velozDashSpeed = 0;
         if (p.velozDashHits === undefined) p.velozDashHits = [];
 
+        // Blitzcrank Initializations
+        if (p.blitzcrankCooldown === undefined) p.blitzcrankCooldown = 0;
+        if (p.blitzcrankCharge === undefined) p.blitzcrankCharge = 0;
+
+        // Yone Initializations
+        if (p.yoneCooldown === undefined) p.yoneCooldown = 0;
+        if (p.yoneSoulActive === undefined) p.yoneSoulActive = false;
+        if (p.yoneReturning === undefined) p.yoneReturning = false;
+        if (p.yoneSoulTimer === undefined) p.yoneSoulTimer = 0;
+
+        // Bomberman Initializations
+        if (p.bombermanCooldown === undefined) p.bombermanCooldown = 0;
+        if (p.bombermanCharge === undefined) p.bombermanCharge = 0;
+
+        // Terranova Initializations
+        if (p.terranovaCooldown === undefined) p.terranovaCooldown = 0;
+        if (p.terranovaCharge === undefined) p.terranovaCharge = 0;
+        if (p.terranovaWall === undefined) p.terranovaWall = null;
+
+        // Sett Initializations
+        if (p.settCooldown === undefined) p.settCooldown = 0;
+        if (p.settCharge === undefined) p.settCharge = 0;
+        if (p.settGrabbedEnemy === undefined) p.settGrabbedEnemy = null;
+        if (p.settIsJumping === undefined) p.settIsJumping = false;
+
+        // Cooldown Decrements
         if (p.balanceadoCooldown > 0) p.balanceadoCooldown--;
         if (p.gordoCooldown > 0) p.gordoCooldown--;
+        if (p.blitzcrankCooldown > 0) p.blitzcrankCooldown--;
+        if (p.yoneCooldown > 0) p.yoneCooldown--;
+        if (p.bombermanCooldown > 0) p.bombermanCooldown--;
+        if (p.terranovaCooldown > 0) p.terranovaCooldown--;
+        if (p.settCooldown > 0) p.settCooldown--;
         if (p.zonerRechargeTimer > 0) {
             p.zonerRechargeTimer--;
             if (p.zonerRechargeTimer === 0) {
@@ -1093,6 +1594,7 @@ class SmashGame {
             p.upSpecialUsed = false;
             p.velozDashUsed = false;
             p.voladorFlying = false;
+            p.consecutiveBounces = 0;
         } else if (p.charData.name === "Palomo") {
             p.voladorFlying = true;
         }
@@ -1115,16 +1617,57 @@ class SmashGame {
                     if (checkAABBCollision(playerRect, oppRect) && !p.velozDashHits.includes(opponent.id)) {
                         const progress = (p.velozDashSpeed - 12) / 12; // 0 to 1
                         const damage = Math.round(11 + progress * 9); // 11 to 20 damage (small nerf)
-                        
+
                         if (p.velozDashSpeed > 12 && opponent.damage > 50) {
                             playSoundFile('sound/efectos/fernan-embestida.mp3');
                         }
-                        
+
                         applyHit(p, opponent, damage);
                         p.velozDashHits.push(opponent.id);
                     }
                 }
             });
+        }
+
+        // Yone Soul Timer Tick
+        if (p.charData.name === "Yone" && p.yoneSoulActive) {
+            p.yoneSoulTimer--;
+            if (p.yoneSoulTimer <= 0) {
+                returnYoneToBody(p);
+            }
+        }
+
+        // Sett Grab Jump Update
+        if (p.charData.name === "Sett" && p.settIsJumping && p.settGrabbedEnemy) {
+            const target = p.settGrabbedEnemy;
+            if (target.respawning || target.stocks <= 0) {
+                p.settGrabbedEnemy = null;
+                p.settIsJumping = false;
+            } else {
+                target.x = p.x + p.facing * 20;
+                target.y = p.y;
+                target.vx = 0;
+                target.vy = 0;
+                target.hitStun = 5;
+
+                if (p.isGrounded && Math.abs(p.vy) < 0.1) {
+                    // Slam!
+                    const distX = Math.abs(p.x - p.settGrabStartX);
+                    const distY = Math.max(0, p.y - p.settGrabStartY);
+                    const totalDist = distX + distY;
+                    const slamDamage = Math.round(9 + totalDist * 0.0375);
+
+                    applyHit(p, target, slamDamage, null, 0.45);
+
+                    // Let applyHit handle target.vx and target.vy dynamically, but ensure solid hitstun:
+                    target.hitStun = Math.max(35, target.hitStun || 0);
+
+                    gameEngine.triggerExplosion(p.x + p.w / 2, p.y + p.h, p.id, 50, target.id);
+
+                    p.settGrabbedEnemy = null;
+                    p.settIsJumping = false;
+                }
+            }
         }
 
         // Shield recovery
@@ -1164,6 +1707,18 @@ class SmashGame {
             }
         }
 
+        // Detect double tap down
+        const prevDown = prevKeys.down || false;
+        if (keys.down && !prevDown) {
+            const now = Date.now();
+            if (p.lastDownPressTime && (now - p.lastDownPressTime < 250)) {
+                p.doubleTapDown = true;
+            }
+            p.lastDownPressTime = now;
+        } else {
+            p.doubleTapDown = false;
+        }
+
         // Physics / Movement
         if (p.hitStun <= 0 && p.shieldStun <= 0) {
             // Shield toggle
@@ -1181,22 +1736,27 @@ class SmashGame {
                 }
 
                 // Horizontal Move
+                let currentSpeed = p.charData.speed;
+                if (p.charData.name === "Yone" && p.yoneSoulActive) {
+                    currentSpeed = p.charData.speed * 1.5;
+                }
+
                 let appliedFriction = false;
-                if (Math.abs(p.vx) > p.charData.speed) {
+                if (Math.abs(p.vx) > currentSpeed) {
                     p.vx *= p.isGrounded ? 0.75 : 0.95;
                     appliedFriction = true;
                 }
 
                 if (keys.left) {
                     if (!appliedFriction) {
-                        p.vx = Math.max(-p.charData.speed, p.vx - 0.8);
+                        p.vx = Math.max(-currentSpeed, p.vx - 0.8);
                     } else if (p.vx > 0) {
                         p.vx -= 0.8; // extra braking force
                     }
                     p.facing = -1;
                 } else if (keys.right) {
                     if (!appliedFriction) {
-                        p.vx = Math.min(p.charData.speed, p.vx + 0.8);
+                        p.vx = Math.min(currentSpeed, p.vx + 0.8);
                     } else if (p.vx < 0) {
                         p.vx += 0.8; // extra braking force
                     }
@@ -1248,11 +1808,20 @@ class SmashGame {
                     // Determine if Smash / direction
                     const hasDir = keys.left || keys.right || keys.up || keys.down;
                     if (keys.up) {
-                        triggerMeleeHitbox(p, 45, 60, 9, 10, 0, -45); // Up Air/Tilt
+                        let dmg = 9;
+                        if (p.charData.phenotype === 'pesado') dmg = 7.5;
+                        else if (p.charData.phenotype === 'balanceado') dmg = 8;
+                        triggerMeleeHitbox(p, 45, 60, dmg, 10, 0, -45); // Up Air/Tilt
                     } else if (keys.down) {
-                        triggerMeleeHitbox(p, 65, 30, 8, 9, 5, 20);  // Down sweep
+                        let dmg = 8;
+                        if (p.charData.phenotype === 'pesado') dmg = 6.5;
+                        else if (p.charData.phenotype === 'balanceado') dmg = 7;
+                        triggerMeleeHitbox(p, 65, 30, dmg, 9, 5, 20);  // Down sweep
                     } else if (keys.left || keys.right) {
-                        triggerMeleeHitbox(p, 60, 40, 11, 12, 10, -5); // Smash Forward
+                        let dmg = 11;
+                        if (p.charData.phenotype === 'pesado') dmg = 8.5;
+                        else if (p.charData.phenotype === 'balanceado') dmg = 9;
+                        triggerMeleeHitbox(p, 60, 40, dmg, 12, 10, -5); // Smash Forward
                     } else {
                         // Neutral Combo attack (3-step combo)
                         if (p.comboTimer > 0) {
@@ -1274,7 +1843,7 @@ class SmashGame {
                     // Up Special (One-shot per airtime)
                     if (p.balanceadoCharge) p.balanceadoCharge = 0;
                     if (p.velozCharge) p.velozCharge = 0;
-                    
+
                     if (!p.isGrounded && p.upSpecialUsed) {
                         // Already used in the air, do nothing
                     } else {
@@ -1463,6 +2032,198 @@ class SmashGame {
                                 p.gordoCooldown = 40;
                             }
                         }
+                    } else if (p.charData.name === "Blitzcrank") {
+                        if (p.blitzcrankCooldown <= 0) {
+                            if (keys.attackB) { // removed p.isGrounded restriction for diagonal aiming flex
+                                p.blitzcrankCharge++;
+                                p.vx = 0;
+                                if (p.vy > 0) p.vy = 0.5;
+                                if (p.blitzcrankCharge >= 45) {
+                                    fireBlitzcrankHook(p, 1.0, keys);
+                                }
+                            } else if (p.blitzcrankCharge > 0) {
+                                fireBlitzcrankHook(p, Math.min(1.0, p.blitzcrankCharge / 45), keys);
+                            }
+                        }
+                    } else if (p.charData.name === "Yone") {
+                        if (keys.attackB && !prevKeys.attackB && (!keys.up || p.isGrounded)) {
+                            if (p.yoneSoulActive) {
+                                returnYoneToBody(p);
+                            } else if (p.yoneCooldown <= 0) {
+                                p.yoneSoulActive = true;
+                                p.yoneBodyX = p.x;
+                                p.yoneBodyY = p.y;
+                                p.yoneSoulTimer = 280; // 4.67 seconds
+                                p.invulnerable = 10;
+                                playSynthSound('jump');
+                            }
+                        }
+                    } else if (p.charData.name === "Bomberman") {
+                        if (p.bombermanCooldown <= 0) {
+                            if (keys.attackB && (!keys.up || p.isGrounded)) {
+                                p.bombermanCharge++;
+                                p.vx = 0;
+                                if (p.vy > 0) p.vy = 0.5;
+                                if (p.bombermanCharge >= 45) {
+                                    const progress = 1.0;
+                                    const size = Math.round(20 + progress * 20);
+                                    shootProjectile(p, 'bomberman_bomb', p.facing * 1.5, -2, 0, 0, size, size);
+                                    const lastP = gameEngine.projectiles[gameEngine.projectiles.length - 1];
+                                    if (lastP && lastP.type === 'bomberman_bomb') {
+                                        lastP.explosionRadius = Math.round(80 + progress * 100);
+                                        lastP.life = 130;
+                                    }
+                                    p.bombermanCooldown = 94;
+                                    p.bombermanCharge = 0;
+                                }
+                            } else if (p.bombermanCharge > 0) {
+                                const progress = Math.min(1.0, p.bombermanCharge / 45);
+                                const size = Math.round(20 + progress * 20);
+                                shootProjectile(p, 'bomberman_bomb', p.facing * 1.5, -2, 0, 0, size, size);
+                                const lastP = gameEngine.projectiles[gameEngine.projectiles.length - 1];
+                                if (lastP && lastP.type === 'bomberman_bomb') {
+                                    lastP.explosionRadius = Math.round(80 + progress * 100);
+                                    lastP.life = 130;
+                                }
+                                p.bombermanCooldown = 94;
+                                p.bombermanCharge = 0;
+                            }
+                        }
+                    } else if (p.charData.name === "Terranova") {
+                        if (p.terranovaCooldown <= 0) {
+                            if (keys.attackB && (!keys.up || p.isGrounded)) {
+                                p.terranovaCharge++;
+                                p.vx = 0;
+                                if (p.vy > 0) p.vy = 0.5;
+                                if (p.terranovaCharge >= 45) {
+                                    const progress = 1.0;
+                                    const hMain = Math.round(60 + progress * 200);
+                                    const hMini2 = Math.round(hMain * 0.5);
+                                    const hMini1 = Math.round(hMini2 * 0.5);
+                                    const w = 32;
+                                    const xMain = p.x + (p.facing === 1 ? p.w + 90 : -122);
+                                    const xMini1 = p.x + (p.facing === 1 ? p.w + 25 : -57);
+                                    const xMini2 = p.x + (p.facing === 1 ? p.w + 58 : -90);
+
+                                    const damage = Math.round(5 + progress * 10);
+
+                                    const wallMain = {
+                                        x: xMain, y: p.y + p.h - 1, w: w, h: 1,
+                                        targetHeight: hMain, originY: p.y + p.h - hMain,
+                                        isWall: true, ownerId: p.id, life: 280, spawnDelay: 12, damage: damage, semi: false
+                                    };
+                                    const wallMini2 = {
+                                        x: xMini2, y: p.y + p.h - 1, w: w, h: 1,
+                                        targetHeight: hMini2, originY: p.y + p.h - hMini2,
+                                        isWall: true, ownerId: p.id, life: 280, spawnDelay: 6, damage: damage, semi: false
+                                    };
+                                    const wallMini1 = {
+                                        x: xMini1, y: p.y + p.h - 1, w: w, h: 1,
+                                        targetHeight: hMini1, originY: p.y + p.h - hMini1,
+                                        isWall: true, ownerId: p.id, life: 280, spawnDelay: 0, damage: damage, semi: false
+                                    };
+
+                                    gameEngine.platforms.push(wallMini1, wallMini2, wallMain);
+
+                                    playSynthSound('heavy_hit');
+                                    p.terranovaCooldown = 112;
+                                    p.terranovaCharge = 0;
+                                }
+                            } else if (p.terranovaCharge > 0) {
+                                const progress = Math.min(1.0, p.terranovaCharge / 45);
+                                const hMain = Math.round(60 + progress * 200);
+                                const hMini2 = Math.round(hMain * 0.5);
+                                const hMini1 = Math.round(hMini2 * 0.5);
+                                const w = 32;
+                                const xMain = p.x + (p.facing === 1 ? p.w + 90 : -122);
+                                const xMini1 = p.x + (p.facing === 1 ? p.w + 25 : -57);
+                                const xMini2 = p.x + (p.facing === 1 ? p.w + 58 : -90);
+
+                                const damage = Math.round(5 + progress * 10);
+
+                                const wallMain = {
+                                    x: xMain, y: p.y + p.h - 1, w: w, h: 1,
+                                    targetHeight: hMain, originY: p.y + p.h - hMain,
+                                    isWall: true, ownerId: p.id, life: 280, spawnDelay: 12, damage: damage, semi: false
+                                };
+                                const wallMini2 = {
+                                    x: xMini2, y: p.y + p.h - 1, w: w, h: 1,
+                                    targetHeight: hMini2, originY: p.y + p.h - hMini2,
+                                    isWall: true, ownerId: p.id, life: 280, spawnDelay: 6, damage: damage, semi: false
+                                };
+                                const wallMini1 = {
+                                    x: xMini1, y: p.y + p.h - 1, w: w, h: 1,
+                                    targetHeight: hMini1, originY: p.y + p.h - hMini1,
+                                    isWall: true, ownerId: p.id, life: 280, spawnDelay: 0, damage: damage, semi: false
+                                };
+
+                                gameEngine.platforms.push(wallMini1, wallMini2, wallMain);
+
+                                playSynthSound('heavy_hit');
+                                p.terranovaCooldown = 112;
+                                p.terranovaCharge = 0;
+                            }
+                        }
+                    } else if (p.charData.name === "Sett") {
+                        if (p.settCooldown <= 0 && !p.settIsJumping) {
+                            const targetRange = 50;
+                            let target = null;
+                            for (let opponent of gameEngine.players) {
+                                if (opponent.id !== p.id && !opponent.respawning && opponent.invulnerable <= 0) {
+                                    const dist = Math.abs((p.x + p.w / 2) - (opponent.x + opponent.w / 2));
+                                    const verticalDist = Math.abs(p.y - opponent.y);
+                                    if (dist <= (p.w / 2 + opponent.w / 2 + targetRange) && verticalDist < p.h) {
+                                        target = opponent;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (target) {
+                                if (keys.attackB && (!keys.up || p.isGrounded)) {
+                                    p.settCharge++;
+                                    if (p.settCharge === 1) {
+                                        p.settGrabSide = (target.x + target.w / 2 < p.x + p.w / 2) ? -1 : 1;
+                                        p.facing = p.settGrabSide;
+                                    }
+                                    // Allow changing facing direction during charge
+                                    if (keys.left) p.facing = -1;
+                                    else if (keys.right) p.facing = 1;
+
+                                    p.vx = 0;
+                                    p.vy = 0;
+                                    target.x = p.x + p.settGrabSide * 20;
+                                    target.y = p.y;
+                                    target.vx = 0;
+                                    target.vy = 0;
+                                    target.hitStun = 5;
+
+                                    if (p.settCharge >= 45) {
+                                        const progress = 1.0;
+                                        p.settGrabbedEnemy = target;
+                                        p.settIsJumping = true;
+                                        p.settGrabStartX = p.x;
+                                        p.settGrabStartY = p.y;
+                                        p.vy = -9;
+                                        p.vx = p.facing * (8 + progress * 10);
+                                        p.settCharge = 0;
+                                        p.settCooldown = 136;
+                                        playSynthSound('jump');
+                                    }
+                                } else if (p.settCharge > 0) {
+                                    const progress = Math.min(1.0, p.settCharge / 45);
+                                    p.settGrabbedEnemy = target;
+                                    p.settIsJumping = true;
+                                    p.settGrabStartX = p.x;
+                                    p.settGrabStartY = p.y;
+                                    p.vy = -9;
+                                    p.vx = p.facing * (8 + progress * 10);
+                                    p.settCharge = 0;
+                                    p.settCooldown = 136;
+                                    playSynthSound('jump');
+                                }
+                            }
+                        }
                     } else {
                         if (keys.attackB && !prevKeys.attackB && (!keys.up || p.isGrounded)) {
                             p.charData.specials.neutral(p);
@@ -1519,10 +2280,66 @@ class SmashGame {
         // Platforms Collisions
         p.isGrounded = false;
 
+        // Wall horizontal collisions
         for (let plat of this.platforms) {
-            // Fall through semi-platform
-            if (plat.semi && keys.down && p.vy >= 0 && (p.y + p.h - p.vy <= plat.y + 2)) {
+            if (plat.terrainType === 'rompible' && plat.broken) {
                 continue;
+            }
+            if (plat.isWall) {
+                if (p.y + p.h > plat.y + 6) {
+                    const playerRect = { x: p.x, y: p.y, w: p.w, h: p.h };
+                    const platRect = { x: plat.x, y: plat.y, w: plat.w, h: plat.h };
+                    if (checkAABBCollision(playerRect, platRect)) {
+                        const overlapLeft = (p.x + p.w) - plat.x;
+                        const overlapRight = (plat.x + plat.w) - p.x;
+                        if (overlapLeft < overlapRight) {
+                            p.x -= overlapLeft;
+                            if (p.hitStun > 0 && p.vx > 0) {
+                                p.consecutiveBounces = (p.consecutiveBounces || 0) + 1;
+                                const bounceCoeff = 0.55 * Math.pow(0.5, p.consecutiveBounces - 1);
+                                p.vx = -p.vx * bounceCoeff;
+                                playSynthSound('hit');
+                                createBlastParticles(p.x, p.y, '#e2e8f0', Math.max(2, Math.round(8 * bounceCoeff)), 0.45 * bounceCoeff);
+                            } else if (p.vx > 0) {
+                                p.vx = 0;
+                            }
+                        } else {
+                            p.x += overlapRight;
+                            if (p.hitStun > 0 && p.vx < 0) {
+                                p.consecutiveBounces = (p.consecutiveBounces || 0) + 1;
+                                const bounceCoeff = 0.55 * Math.pow(0.5, p.consecutiveBounces - 1);
+                                p.vx = -p.vx * bounceCoeff;
+                                playSynthSound('hit');
+                                createBlastParticles(p.x, p.y, '#e2e8f0', Math.max(2, Math.round(8 * bounceCoeff)), 0.45 * bounceCoeff);
+                            } else if (p.vx < 0) {
+                                p.vx = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (let plat of this.platforms) {
+            if (plat.terrainType === 'rompible' && plat.broken) {
+                continue;
+            }
+
+            // Fall through traspasable platform
+            if (plat.terrainType === 'traspasable') {
+                if (p.ignoreSemiPlatformsTimer > 0) {
+                    continue;
+                }
+                if (p.doubleTapDown) {
+                    p.ignoreSemiPlatformsTimer = 12;
+                    p.y += 6;
+                    p.isGrounded = false;
+                    p.vy = 2.5;
+                    continue;
+                }
+                if (keys.down && p.vy >= 0 && (p.y + p.h - p.vy <= plat.y + 2)) {
+                    continue;
+                }
             }
 
             // Solid collision from top
@@ -1535,6 +2352,17 @@ class SmashGame {
                 p.x + p.w * 0.8 > plat.x &&
                 p.y + p.h - p.vy <= plat.y + verticalThreshold &&
                 p.y + p.h >= plat.y - bottomTolerance) {
+
+                // If in hitstun, apply floor bounce/rebound!
+                if (p.hitStun > 0 && p.vy > 1.5) {
+                    p.y = plat.y - p.h;
+                    p.consecutiveBounces = (p.consecutiveBounces || 0) + 1;
+                    const bounceCoeff = 0.55 * Math.pow(0.5, p.consecutiveBounces - 1);
+                    p.vy = -p.vy * bounceCoeff;
+                    playSynthSound('hit');
+                    createBlastParticles(p.x + p.w/2, p.y + p.h, '#e2e8f0', Math.max(2, Math.round(8 * bounceCoeff)), 0.45 * bounceCoeff);
+                    break;
+                }
 
                 p.y = plat.y - p.h;
                 p.vy = 0;
@@ -1555,6 +2383,17 @@ class SmashGame {
             this.slowMoActive = false;
             this.slowMoTarget = null;
         }
+        if (p.charData.name === "Yone") {
+            p.yoneSoulActive = false;
+            p.yoneReturning = false;
+            this.players.forEach(opp => {
+                if (opp.yoneMarkedBy === p.id) {
+                    opp.yoneMarkedBy = null;
+                    opp.yoneDamageAccumulated = 0;
+                }
+            });
+        }
+
         createBlastParticles(Math.min(V_WIDTH, Math.max(0, p.x)), Math.min(V_HEIGHT, Math.max(0, p.y)), p.charData.color);
         playSynthSound('death');
         p.damage = 0; // Reset damage immediately upon death
@@ -1776,8 +2615,21 @@ class SmashGame {
         if (typeof stopBattleMusic === 'function') {
             stopBattleMusic();
         }
-        if (typeof playMenuMusic === 'function') {
-            playMenuMusic();
+        let terranovaWon = false;
+        if (winner !== "Empate") {
+            terranovaWon = this.players.some(p => winner.includes(p.name) && p.charData && p.charData.name === "Terranova");
+        }
+
+        if (terranovaWon) {
+            if (typeof playTerranovaVictoryMusic === 'function') {
+                playTerranovaVictoryMusic();
+            } else if (typeof playMenuMusic === 'function') {
+                playMenuMusic();
+            }
+        } else {
+            if (typeof playMenuMusic === 'function') {
+                playMenuMusic();
+            }
         }
     }
 
@@ -1819,14 +2671,22 @@ class SmashGame {
 
         // Draw Stages Platforms
         this.platforms.forEach(plat => {
-            if (plat.semi) {
+            if (plat.terrainType === 'rompible' && plat.broken) return;
+
+            if (plat.terrainType === 'traspasable') {
                 this.ctx.fillStyle = '#475569';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
                 // Glass top
                 this.ctx.fillStyle = '#94a3b8';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, 3);
+            } else if (plat.terrainType === 'rompible') {
+                // Brown brick color for breakable
+                this.ctx.fillStyle = '#78350f';
+                this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+                this.ctx.fillStyle = '#d97706'; // orange trim
+                this.ctx.fillRect(plat.x, plat.y, plat.w, 3);
             } else {
-                // Main platform
+                // Main platform / Duro
                 this.ctx.fillStyle = '#1e293b';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
 
@@ -1872,6 +2732,54 @@ class SmashGame {
                 this.ctx.beginPath();
                 this.ctx.arc(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.w / 2, 0, Math.PI * 2);
                 this.ctx.fill();
+            } else if (pr.type === 'bomberman_bomb') {
+                // Dark grey bomb with red pulsing outline
+                const pulse = 0.5 + Math.sin(Date.now() / 100) * 0.5;
+                this.ctx.fillStyle = '#334155';
+                this.ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + pulse * 0.6})`;
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.arc(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.w / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+
+                // Bomb fuse
+                this.ctx.strokeStyle = '#fbbf24';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(pr.x + pr.w / 2, pr.y);
+                this.ctx.quadraticCurveTo(pr.x + pr.w / 2 + 5, pr.y - 5, pr.x + pr.w / 2 + 8, pr.y - 8);
+                this.ctx.stroke();
+            } else if (pr.type === 'hook') {
+                const owner = this.players.find(pl => pl.id === pr.attackerId);
+                if (owner) {
+                    // Draw rope / chain
+                    this.ctx.save();
+                    // Outer outline
+                    this.ctx.strokeStyle = '#475569';
+                    this.ctx.lineWidth = 6;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(owner.x + owner.w / 2, owner.y + owner.h / 2);
+                    this.ctx.lineTo(pr.x + pr.w / 2, pr.y + pr.h / 2);
+                    this.ctx.stroke();
+
+                    // Inner shiny rope
+                    this.ctx.strokeStyle = '#e2e8f0';
+                    this.ctx.lineWidth = 3;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(owner.x + owner.w / 2, owner.y + owner.h / 2);
+                    this.ctx.lineTo(pr.x + pr.w / 2, pr.y + pr.h / 2);
+                    this.ctx.stroke();
+                    this.ctx.restore();
+                }
+                // Draw hook head (claw/anchor)
+                this.ctx.fillStyle = '#f59e0b';
+                this.ctx.strokeStyle = '#d97706';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(pr.x + pr.w / 2, pr.y + pr.h / 2, pr.w / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
             } else {
                 this.ctx.fillStyle = pr.type === 'fireball' ? '#f59e0b' : '#38bdf8';
                 this.ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
@@ -2086,6 +2994,60 @@ class SmashGame {
                 this.ctx.beginPath();
                 this.ctx.arc(8, -4, 12, -Math.PI / 2, Math.PI / 2);
                 this.ctx.stroke();
+            } else if (p.charData.name === "Yone") {
+                // Katana: red hilt, steel blade
+                this.ctx.strokeStyle = '#ef4444'; // Red guard/hilt
+                this.ctx.lineWidth = 4;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(4, -2);
+                this.ctx.stroke();
+
+                this.ctx.strokeStyle = '#cbd5e1'; // Steel blade
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(4, -2);
+                this.ctx.lineTo(22, -11);
+                this.ctx.stroke();
+            } else if (p.charData.name === "Blitzcrank") {
+                // Metallic hook
+                this.ctx.strokeStyle = '#94a3b8'; // Grey hook body
+                this.ctx.lineWidth = 3;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(12, -4);
+                this.ctx.stroke();
+
+                this.ctx.strokeStyle = '#94a3b8';
+                this.ctx.beginPath();
+                this.ctx.arc(12, -4, 6, -Math.PI / 2, Math.PI / 2);
+                this.ctx.stroke();
+            } else if (p.charData.name === "Bomberman") {
+                // Small bomb
+                this.ctx.fillStyle = '#1e293b'; // Dark blue/grey bomb body
+                this.ctx.beginPath();
+                this.ctx.arc(8, -2, 6, 0, Math.PI * 2);
+                this.ctx.fill();
+
+                // Fuse
+                this.ctx.strokeStyle = '#fbbf24'; // Yellow fuse
+                this.ctx.lineWidth = 1.5;
+                this.ctx.beginPath();
+                this.ctx.moveTo(8, -8);
+                this.ctx.lineTo(12, -12);
+                this.ctx.stroke();
+            } else if (p.charData.name === "Sett") {
+                // Boxing fists / gloves
+                this.ctx.fillStyle = '#ea580c'; // Orange combat glove
+                this.ctx.beginPath();
+                this.ctx.arc(8, -2, 7, 0, Math.PI * 2);
+                this.ctx.fill();
+            } else if (p.charData.name === "Terranova") {
+                // Piece of earth/rock
+                this.ctx.fillStyle = '#78350f'; // Brown earth
+                this.ctx.fillRect(4, -8, 12, 10);
+                this.ctx.fillStyle = '#a16207'; // Top trim/highlights
+                this.ctx.fillRect(4, -8, 12, 3);
             }
             this.ctx.restore();
 
@@ -2093,7 +3055,7 @@ class SmashGame {
             if (p.heldItem) {
                 const itemImg = itemImages[p.heldItem];
                 if (itemImg && itemImg.complete) {
-                    this.ctx.drawImage(itemImg, -12, -p.h - 28, 24, 24);
+                    this.ctx.drawImage(itemImg, -12, -p.h - 38, 24, 24);
                 }
             }
 
@@ -2185,7 +3147,175 @@ class SmashGame {
                 this.ctx.fillRect(p.x - p.facing * 30, p.y, p.w, p.h);
             }
 
+            // Draw charging effect for Blitzcrank
+            if (p.charData.name === "Blitzcrank" && p.blitzcrankCharge > 0) {
+                const chargeProgress = Math.min(1, p.blitzcrankCharge / 45);
+                this.ctx.fillStyle = 'rgba(251, 191, 36, 0.6)';
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                // Draw electrical spark dots
+                for (let i = 0; i < 4; i++) {
+                    const offsetAngle = (Date.now() / 80 + i * 1.5) % (Math.PI * 2);
+                    const rx = p.x + p.w / 2 + Math.cos(offsetAngle) * (18 + chargeProgress * 8);
+                    const ry = p.y + p.h / 2 + Math.sin(offsetAngle) * (18 + chargeProgress * 8);
+                    this.ctx.beginPath();
+                    this.ctx.arc(rx, ry, 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
+            }
 
+            // Draw Yone body and connection thread
+            if (p.charData.name === "Yone" && p.yoneSoulActive) {
+                this.ctx.save();
+                this.ctx.globalAlpha = 0.5;
+                this.ctx.fillStyle = '#64748b'; // slate gray empty body
+                this.ctx.beginPath();
+                this.ctx.roundRect(p.yoneBodyX, p.yoneBodyY, p.w, p.h, [8]);
+                this.ctx.fill();
+
+                // Closed visor/eyes
+                this.ctx.fillStyle = '#1e293b';
+                this.ctx.fillRect(p.yoneBodyX + (p.facing === 1 ? p.w - 14 : 2), p.yoneBodyY + 10, 12, 8);
+                this.ctx.restore();
+
+                // Connection line
+                this.ctx.save();
+                this.ctx.beginPath();
+                this.ctx.moveTo(p.yoneBodyX + p.w / 2, p.yoneBodyY + p.h / 2);
+                this.ctx.lineTo(p.x + p.w / 2, p.y + p.h / 2);
+                this.ctx.strokeStyle = '#c084fc';
+                this.ctx.lineWidth = 2.5;
+                this.ctx.setLineDash([4, 4]);
+                this.ctx.stroke();
+                this.ctx.restore();
+
+                // Soul glowing border
+                this.ctx.save();
+                this.ctx.strokeStyle = '#a855f7';
+                this.ctx.lineWidth = 3;
+                this.ctx.strokeRect(p.x - 2, p.y - 2, p.w + 4, p.h + 4);
+                this.ctx.restore();
+            }
+
+            // Draw charging effect for Bomberman
+            if (p.charData.name === "Bomberman" && p.bombermanCharge > 0) {
+                const chargeProgress = Math.min(1, p.bombermanCharge / 45);
+                const radius = 6 + chargeProgress * 15;
+                this.ctx.fillStyle = `rgba(239, 68, 68, ${0.4 + chargeProgress * 0.5})`;
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1.5;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x + p.w / 2, p.y - 12, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.stroke();
+            }
+
+            // Draw charging effect for Terranova
+            if (p.charData.name === "Terranova" && p.terranovaCharge > 0) {
+                const chargeProgress = Math.min(1, p.terranovaCharge / 45);
+                this.ctx.fillStyle = 'rgba(120, 53, 15, 0.6)';
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                // Earth dust particles rising
+                for (let i = 0; i < 3; i++) {
+                    const py = p.y + p.h - ((Date.now() / 15 + i * 20) % 40);
+                    const px = p.x + p.w / 2 + (Math.sin(py * 0.1) * 15);
+                    this.ctx.beginPath();
+                    this.ctx.arc(px, py, 1.5 + chargeProgress * 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
+            }
+
+            // Draw charging effect for Sett
+            if (p.charData.name === "Sett" && p.settCharge > 0) {
+                const chargeProgress = Math.min(1, p.settCharge / 45);
+                this.ctx.save();
+                this.ctx.strokeStyle = `rgba(220, 38, 38, ${0.5 + chargeProgress * 0.5})`;
+                this.ctx.lineWidth = 2 + chargeProgress * 3;
+                this.ctx.strokeRect(p.x - 4, p.y - 4, p.w + 8, p.h + 8);
+                this.ctx.restore();
+            }
+
+            // Draw Sett slam/jump trail
+            if (p.charData.name === "Sett" && p.settIsJumping) {
+                this.ctx.fillStyle = 'rgba(220, 38, 38, 0.25)';
+                this.ctx.fillRect(p.x - p.facing * 12, p.y, p.w, p.h);
+            }
+
+            // Draw Yone's mark above the player's head if marked
+            if (p.yoneMarkedBy) {
+                const markerYone = this.players.find(pl => pl.id === p.yoneMarkedBy);
+                const isYoneReturning = markerYone ? markerYone.yoneReturning : false;
+
+                this.ctx.save();
+                this.ctx.translate(p.x + p.w / 2, p.y - 18);
+
+                if (isYoneReturning) {
+                    // Flash red/rose slash mark
+                    const pulse = 0.5 + Math.sin(Date.now() / 50) * 0.5;
+                    this.ctx.strokeStyle = '#ef4444';
+                    this.ctx.fillStyle = `rgba(239, 68, 68, ${0.4 + pulse * 0.6})`;
+                    this.ctx.lineWidth = 3;
+
+                    // Draw an elegant "X" or cross slash mark
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(-6, -6);
+                    this.ctx.lineTo(6, 6);
+                    this.ctx.moveTo(6, -6);
+                    this.ctx.lineTo(-6, 6);
+                    this.ctx.stroke();
+                } else {
+                    // Soft purple diamond mark
+                    this.ctx.fillStyle = '#c084fc';
+                    this.ctx.strokeStyle = '#a855f7';
+                    this.ctx.lineWidth = 1.5;
+
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, -6);
+                    this.ctx.lineTo(4, 0);
+                    this.ctx.lineTo(0, 6);
+                    this.ctx.lineTo(-4, 0);
+                    this.ctx.closePath();
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
+                this.ctx.restore();
+            }
+
+            // Draw special ability cooldown bar
+            const cd = getPlayerCooldownProgress(p);
+            const fillRatio = cd.max > 0 ? (cd.max - cd.current) / cd.max : 1.0;
+            const isReady = cd.current <= 0;
+
+            const barW = 24;
+            const barH = 3.5;
+            const barX = p.x + p.w / 2 - barW / 2;
+            const barY = p.y - 12; // draw it just above the player's head, below the name tag
+
+            this.ctx.save();
+            // Draw background (grey and slightly opaque)
+            this.ctx.fillStyle = 'rgba(71, 85, 105, 0.6)'; // slate-600
+            this.ctx.fillRect(barX, barY, barW, barH);
+
+            // Draw white fill representing ready progress
+            this.ctx.fillStyle = isReady ? '#ffffff' : 'rgba(241, 245, 249, 0.7)'; // solid white if ready, slightly opaque if charging
+            this.ctx.fillRect(barX, barY, barW * fillRatio, barH);
+
+            if (isReady) {
+                // Add glowing outline/effect when ready
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(barX - 0.5, barY - 0.5, barW + 1, barH + 1);
+
+                // Add a small shining white spark/glow at 100% readiness
+                this.ctx.shadowColor = '#ffffff';
+                this.ctx.shadowBlur = 4;
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillRect(barX, barY, barW, barH);
+            }
+            this.ctx.restore();
 
             this.ctx.restore();
         });

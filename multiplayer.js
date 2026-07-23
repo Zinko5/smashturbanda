@@ -19,7 +19,7 @@ let countdownInterval = null;
 let countdownTimeLeft = 6.7;
 let isStageSelectActive = false;
 
-const actualChars = ['balanceado', 'veloz', 'pesado', 'zoner', 'volador'];
+const actualChars = ['balanceado', 'veloz', 'pesado', 'zoner', 'volador', 'blitzcrank', 'yone', 'bomberman', 'terranova', 'sett'];
 function getRandomChar() {
     return actualChars[Math.floor(Math.random() * actualChars.length)];
 }
@@ -1112,6 +1112,11 @@ function overrideGameLoopForP2P() {
                         bombers: gameEngine.bombers.map(b => ({
                             x: b.x, y: b.y, w: b.w, h: b.h
                         })),
+                        walls: gameEngine.platforms
+                            .filter(plat => plat.isWall)
+                            .map(plat => ({
+                                x: plat.x, y: plat.y, w: plat.w, h: plat.h, ownerId: plat.ownerId, life: plat.life
+                            })),
                         // Only broadcast platforms if at least one is moving to save bandwidth
                         platforms: gameEngine.platforms.some(plat => plat.moving)
                             ? gameEngine.platforms.map(plat => ({ x: plat.x, y: plat.y }))
@@ -1173,7 +1178,27 @@ function packPlayerState(p) {
         heldItem: p.heldItem || null,
         balanceadoCharge: p.balanceadoCharge || 0,
         gordoCharge: p.gordoCharge || 0,
-        voladorCharge: p.voladorCharge || 0
+        voladorCharge: p.voladorCharge || 0,
+        blitzcrankCharge: p.blitzcrankCharge || 0,
+        yoneSoulActive: p.yoneSoulActive || false,
+        yoneReturning: p.yoneReturning || false,
+        yoneBodyX: p.yoneBodyX || 0,
+        yoneBodyY: p.yoneBodyY || 0,
+        yoneSoulTimer: p.yoneSoulTimer || 0,
+        yoneMarkedBy: p.yoneMarkedBy || null,
+        yoneDamageAccumulated: p.yoneDamageAccumulated || 0,
+        bombermanCharge: p.bombermanCharge || 0,
+        terranovaCharge: p.terranovaCharge || 0,
+        settCharge: p.settCharge || 0,
+        settIsJumping: p.settIsJumping || false,
+        balanceadoCooldown: p.balanceadoCooldown || 0,
+        voladorBombCooldown: p.voladorBombCooldown || 0,
+        gordoCooldown: p.gordoCooldown || 0,
+        blitzcrankCooldown: p.blitzcrankCooldown || 0,
+        yoneCooldown: p.yoneCooldown || 0,
+        bombermanCooldown: p.bombermanCooldown || 0,
+        terranovaCooldown: p.terranovaCooldown || 0,
+        settCooldown: p.settCooldown || 0
     };
 }
 
@@ -1236,6 +1261,16 @@ function applyHostStateToGuest(state) {
         gameEngine.pumas = state.pumas || [];
         gameEngine.bombers = state.bombers || [];
 
+        // Synchronize dynamic walls on Guest
+        gameEngine.platforms = gameEngine.platforms.filter(plat => !plat.isWall);
+        if (state.walls) {
+            state.walls.forEach(w => {
+                gameEngine.platforms.push({
+                    x: w.x, y: w.y, w: w.w, h: w.h, isWall: true, ownerId: w.ownerId, life: w.life, semi: false
+                });
+            });
+        }
+
         // Synchronize platform coordinates on Guest if provided by Host
         if (state.platforms) {
             state.platforms.forEach((platState, idx) => {
@@ -1296,6 +1331,26 @@ function unpackPlayerState(p, state) {
     p.heldItem = state.heldItem || null;
     p.gordoCharge = state.gordoCharge || 0;
     p.voladorCharge = state.voladorCharge || 0;
+    p.blitzcrankCharge = state.blitzcrankCharge || 0;
+    p.yoneSoulActive = state.yoneSoulActive || false;
+    p.yoneReturning = state.yoneReturning || false;
+    p.yoneBodyX = state.yoneBodyX || 0;
+    p.yoneBodyY = state.yoneBodyY || 0;
+    p.yoneSoulTimer = state.yoneSoulTimer || 0;
+    p.yoneMarkedBy = state.yoneMarkedBy || null;
+    p.yoneDamageAccumulated = state.yoneDamageAccumulated || 0;
+    p.bombermanCharge = state.bombermanCharge || 0;
+    p.terranovaCharge = state.terranovaCharge || 0;
+    p.settCharge = state.settCharge || 0;
+    p.settIsJumping = state.settIsJumping || false;
+    p.balanceadoCooldown = state.balanceadoCooldown || 0;
+    p.voladorBombCooldown = state.voladorBombCooldown || 0;
+    p.gordoCooldown = state.gordoCooldown || 0;
+    p.blitzcrankCooldown = state.blitzcrankCooldown || 0;
+    p.yoneCooldown = state.yoneCooldown || 0;
+    p.bombermanCooldown = state.bombermanCooldown || 0;
+    p.terranovaCooldown = state.terranovaCooldown || 0;
+    p.settCooldown = state.settCooldown || 0;
 }
 
 // Menu Navigations
@@ -1372,6 +1427,10 @@ document.getElementById('btn-options-menu').addEventListener('click', () => {
 document.getElementById('slider-sfx').addEventListener('input', (e) => {
     sfxVolume = parseFloat(e.target.value);
     updateVolumeUI();
+});
+
+document.getElementById('slider-music').addEventListener('input', (e) => {
+    musicVolume = parseFloat(e.target.value);
     if (typeof updateMenuMusicVolume === 'function') {
         updateMenuMusicVolume();
     }
@@ -1382,7 +1441,9 @@ document.getElementById('btn-options-save').addEventListener('click', () => {
     try {
         localStorage.setItem('smashturbanda_settings', JSON.stringify({
             controls: controls,
-            volume: sfxVolume
+            masterVolume: masterVolume,
+            musicVolume: musicVolume,
+            sfxVolume: sfxVolume
         }));
     } catch (e) {
         console.warn("Could not save settings locally", e);
@@ -1547,19 +1608,19 @@ function renderOptionsKeys() {
 }
 
 // Floating Volume Control logic
-let lastActiveVolume = sfxVolume || 0.15;
+let lastActiveVolume = masterVolume || 0.15;
 
 function updateVolumeUI() {
     const slider = document.getElementById('volume-range-floating');
     const button = document.getElementById('btn-volume-toggle');
-    if (slider) slider.value = sfxVolume;
+    if (slider) slider.value = masterVolume;
 
     if (button) {
-        if (sfxVolume === 0) {
+        if (masterVolume === 0) {
             button.textContent = '🔇';
-        } else if (sfxVolume < 0.3) {
+        } else if (masterVolume < 0.3) {
             button.textContent = '🔈';
-        } else if (sfxVolume < 0.7) {
+        } else if (masterVolume < 0.7) {
             button.textContent = '🔉';
         } else {
             button.textContent = '🔊';
@@ -1572,32 +1633,38 @@ function initVolumeControl() {
     const button = document.getElementById('btn-volume-toggle');
 
     if (slider) {
-        slider.value = sfxVolume;
+        slider.value = masterVolume;
         updateVolumeUI();
         slider.addEventListener('input', (e) => {
-            sfxVolume = parseFloat(e.target.value);
-            if (sfxVolume > 0) {
-                lastActiveVolume = sfxVolume;
+            masterVolume = parseFloat(e.target.value);
+            if (masterVolume > 0) {
+                lastActiveVolume = masterVolume;
             }
             updateVolumeUI();
             if (typeof updateMenuMusicVolume === 'function') {
                 updateMenuMusicVolume();
             }
 
-            // Sync with Options slider if it exists
-            const optionsSlider = document.getElementById('slider-sfx');
-            if (optionsSlider) optionsSlider.value = sfxVolume;
+            // Save immediately
+            try {
+                localStorage.setItem('smashturbanda_settings', JSON.stringify({
+                    controls: controls,
+                    masterVolume: masterVolume,
+                    musicVolume: musicVolume,
+                    sfxVolume: sfxVolume
+                }));
+            } catch (err) {}
         });
     }
 
     if (button) {
         button.addEventListener('click', () => {
             initAudio();
-            if (sfxVolume > 0) {
-                lastActiveVolume = sfxVolume;
-                sfxVolume = 0;
+            if (masterVolume > 0) {
+                lastActiveVolume = masterVolume;
+                masterVolume = 0;
             } else {
-                sfxVolume = lastActiveVolume;
+                masterVolume = lastActiveVolume;
             }
             updateVolumeUI();
             playSynthSound('shield');
@@ -1605,9 +1672,15 @@ function initVolumeControl() {
                 updateMenuMusicVolume();
             }
 
-            // Sync with Options slider if it exists
-            const optionsSlider = document.getElementById('slider-sfx');
-            if (optionsSlider) optionsSlider.value = sfxVolume;
+            // Save immediately
+            try {
+                localStorage.setItem('smashturbanda_settings', JSON.stringify({
+                    controls: controls,
+                    masterVolume: masterVolume,
+                    musicVolume: musicVolume,
+                    sfxVolume: sfxVolume
+                }));
+            } catch (err) {}
         });
     }
     updateVolumeUI();
