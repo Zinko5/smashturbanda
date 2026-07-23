@@ -811,7 +811,18 @@ function handleReceivedData(data, senderConn) {
 
         document.getElementById('menu-pause').classList.remove('hidden');
 
-        if (typeof playMenuMusic === 'function') {
+        if (typeof stopBattleMusic === 'function') {
+            stopBattleMusic();
+        }
+
+        let terranovaWon = false;
+        if (data.winner !== "Empate") {
+            terranovaWon = gameEngine.players.some(p => data.winner.includes(p.name) && p.charData && p.charData.name === "Terranova");
+        }
+
+        if (terranovaWon && typeof playTerranovaVictoryMusic === 'function') {
+            playTerranovaVictoryMusic();
+        } else if (typeof playMenuMusic === 'function') {
             playMenuMusic();
         }
     } else if (data.type === 'go_to_css') {
@@ -1100,23 +1111,7 @@ function overrideGameLoopForP2P() {
                     type: 'host_state',
                     state: {
                         players: gameEngine.players.map(p => packPlayerState(p)),
-                        projectiles: gameEngine.projectiles.map(pr => ({
-                            x: pr.x, y: pr.y, w: pr.w, h: pr.h, type: pr.type
-                        })),
-                        items: gameEngine.items.map(item => ({
-                            x: item.x, y: item.y, w: item.w, h: item.h, type: item.type
-                        })),
-                        pumas: gameEngine.pumas.map(puma => ({
-                            x: puma.x, y: puma.y, w: puma.w, h: puma.h
-                        })),
-                        bombers: gameEngine.bombers.map(b => ({
-                            x: b.x, y: b.y, w: b.w, h: b.h
-                        })),
-                        walls: gameEngine.platforms
-                            .filter(plat => plat.isWall)
-                            .map(plat => ({
-                                x: plat.x, y: plat.y, w: plat.w, h: plat.h, ownerId: plat.ownerId, life: plat.life
-                            })),
+                        ...packSchemaEntities(),
                         // Only broadcast platforms if at least one is moving to save bandwidth
                         platforms: gameEngine.platforms.some(plat => plat.moving)
                             ? gameEngine.platforms.map(plat => ({ x: plat.x, y: plat.y }))
@@ -1150,6 +1145,102 @@ function overrideGameLoopForP2P() {
             }
         }
     };
+}
+
+// Schema for synchronizing dynamic entities in multiplayer mode
+const DYNAMIC_ENTITIES_SCHEMA = {
+    projectiles: {
+        arrayName: 'projectiles',
+        properties: ['x', 'y', 'w', 'h', 'type']
+    },
+    items: {
+        arrayName: 'items',
+        properties: ['x', 'y', 'w', 'h', 'type']
+    },
+    pumas: {
+        arrayName: 'pumas',
+        properties: ['x', 'y', 'w', 'h']
+    },
+    bombers: {
+        arrayName: 'bombers',
+        properties: ['x', 'y', 'w', 'h']
+    },
+    walls: {
+        getSourceArray: () => gameEngine.platforms.filter(plat => plat.isWall),
+        properties: ['x', 'y', 'w', 'h', 'ownerId', 'life'],
+        onDeserialize: (stateArray) => {
+            const nonWalls = gameEngine.platforms.filter(plat => !plat.isWall);
+            const existingWalls = gameEngine.platforms.filter(plat => plat.isWall);
+            const len = stateArray ? stateArray.length : 0;
+            const activeWalls = [];
+
+            for (let i = 0; i < len; i++) {
+                const values = stateArray[i];
+                let wObj = existingWalls[i];
+                if (!wObj) {
+                    wObj = { isWall: true, semi: false };
+                }
+                wObj.x = values[0];
+                wObj.y = values[1];
+                wObj.w = values[2];
+                wObj.h = values[3];
+                wObj.ownerId = values[4];
+                wObj.life = values[5];
+                activeWalls.push(wObj);
+            }
+            gameEngine.platforms = nonWalls.concat(activeWalls);
+        }
+    }
+};
+
+function packSchemaEntities() {
+    const packed = {};
+    for (const [key, config] of Object.entries(DYNAMIC_ENTITIES_SCHEMA)) {
+        const source = config.getSourceArray ? config.getSourceArray() : gameEngine[config.arrayName];
+        if (source) {
+            packed[key] = source.map(item => {
+                // Pack values in order of properties (Tuples instead of objects to save bandwidth)
+                return config.properties.map(prop => {
+                    const val = item[prop];
+                    // Quantization: round floating numbers to 1 decimal place to save characters in JSON payload
+                    return typeof val === 'number' ? Math.round(val * 10) / 10 : val;
+                });
+            });
+        }
+    }
+    return packed;
+}
+
+function unpackSchemaEntities(state) {
+    for (const [key, config] of Object.entries(DYNAMIC_ENTITIES_SCHEMA)) {
+        const stateArray = state[key];
+        if (config.onDeserialize) {
+            config.onDeserialize(stateArray);
+        } else if (config.arrayName) {
+            const targetArray = gameEngine[config.arrayName];
+            if (stateArray) {
+                const len = stateArray.length;
+                // Keep target array at same size as received state
+                while (targetArray.length > len) {
+                    targetArray.pop();
+                }
+                // Reuse existing objects inside the array to prevent Garbage Collection overhead
+                for (let i = 0; i < len; i++) {
+                    const values = stateArray[i];
+                    let obj = targetArray[i];
+                    if (!obj) {
+                        obj = {};
+                        targetArray.push(obj);
+                    }
+                    config.properties.forEach((prop, idx) => {
+                        obj[prop] = values[idx];
+                    });
+                }
+            } else {
+                targetArray.length = 0;
+            }
+        }
+    }
 }
 
 function packPlayerState(p) {
@@ -1198,7 +1289,9 @@ function packPlayerState(p) {
         yoneCooldown: p.yoneCooldown || 0,
         bombermanCooldown: p.bombermanCooldown || 0,
         terranovaCooldown: p.terranovaCooldown || 0,
-        settCooldown: p.settCooldown || 0
+        settCooldown: p.settCooldown || 0,
+        zonerCharge: p.zonerCharge || 0,
+        zonerRechargeTimer: p.zonerRechargeTimer || 0
     };
 }
 
@@ -1256,20 +1349,7 @@ function applyHostStateToGuest(state) {
             }
         }
 
-        gameEngine.projectiles = state.projectiles || [];
-        gameEngine.items = state.items || [];
-        gameEngine.pumas = state.pumas || [];
-        gameEngine.bombers = state.bombers || [];
-
-        // Synchronize dynamic walls on Guest
-        gameEngine.platforms = gameEngine.platforms.filter(plat => !plat.isWall);
-        if (state.walls) {
-            state.walls.forEach(w => {
-                gameEngine.platforms.push({
-                    x: w.x, y: w.y, w: w.w, h: w.h, isWall: true, ownerId: w.ownerId, life: w.life, semi: false
-                });
-            });
-        }
+        unpackSchemaEntities(state);
 
         // Synchronize platform coordinates on Guest if provided by Host
         if (state.platforms) {
@@ -1351,6 +1431,8 @@ function unpackPlayerState(p, state) {
     p.bombermanCooldown = state.bombermanCooldown || 0;
     p.terranovaCooldown = state.terranovaCooldown || 0;
     p.settCooldown = state.settCooldown || 0;
+    p.zonerCharge = state.zonerCharge || 0;
+    p.zonerRechargeTimer = state.zonerRechargeTimer || 0;
 }
 
 // Menu Navigations

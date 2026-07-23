@@ -34,6 +34,7 @@ Para cada **parche final (`cc`)**, se debe generar un afiche promocional usando 
 * **Nombrado y versión:** Solo muestran la versión hasta `aa.bb.cc`.
 * **Contenido permitido:** Únicamente deben mostrar las secciones de *Nuevas características o funciones* y *Correcciones de bugs antiguos*. Se excluyen explícitamente las correcciones de bugs de características nuevas.
 
+Los afiches se generan indicando lo más significativo de cada microparche, no solo del último
 ---
 
 ## Flujo de Trabajo en Git

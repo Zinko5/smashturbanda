@@ -61,7 +61,7 @@ const CHARACTERS = {
         height: 48,
         specials: {
             neutral: (p) => { // Projectile
-                shootProjectile(p, 'fireball', p.facing * 10, 0, 15, 6);
+                shootProjectile(p, 'fireball', p.facing * 10, 0, 15);
             },
             up: (p) => { // Recovery
                 p.vy = -16;
@@ -84,7 +84,7 @@ const CHARACTERS = {
                 p.vy = 0;
                 p.shieldStun = 10;
                 // Create hit box active immediately
-                triggerMeleeHitbox(p, 40, 30, 12, 15, p.facing * 8, -5);
+                triggerMeleeHitbox(p, 40, 30, 12, p.facing * 8, -5);
             },
             up: (p) => { // Rocket Jump (Reduced launch height to prevent dying off top screen)
                 p.vy = -14;
@@ -119,7 +119,7 @@ const CHARACTERS = {
                 for (let i = 0; i < 4; i++) {
                     setTimeout(() => {
                         if (gameEngine && gameEngine.running) {
-                            triggerMeleeHitbox(p, 60, 60, 4, 8, 0, 0);
+                            triggerMeleeHitbox(p, 60, 60, 4, 0, 0);
                         }
                     }, i * 80);
                 }
@@ -155,7 +155,7 @@ const CHARACTERS = {
                         vy = 14;
                     }
                 }
-                shootProjectile(p, 'arrow', vx, vy, 10, 8);
+                shootProjectile(p, 'arrow', vx, vy, 10);
             },
             up: (p) => { // Default small jump recovery instead of arrow shoot
                 p.vy = -12;
@@ -179,7 +179,7 @@ const CHARACTERS = {
                     playSynthSound('jump');
                 } else if (p.voladorFlying) {
                     if (p.voladorBombCooldown <= 0) {
-                        shootProjectile(p, 'bomb', 0, 10, 12, 10, 16, 16);
+                        shootProjectile(p, 'bomb', 0, 10, 12, 16, 16);
                         p.voladorBombCooldown = 16;
                     }
                 }
@@ -339,7 +339,7 @@ let activeStage = 'battlefield';
 
 // Helper functions for hit detection
 
-function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offsetY) {
+function triggerMeleeHitbox(attacker, w, h, damage, offsetX, offsetY) {
     let hitboxX;
     if (attacker.facing === 1) {
         // Starts inside the attacker's body (e.g. from the center of the attacker)
@@ -355,7 +355,6 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
         w: w,
         h: h,
         damage: damage,
-        knockback: baseKnockback,
         attackerId: attacker.id
     };
 
@@ -388,7 +387,7 @@ function triggerMeleeHitbox(attacker, w, h, damage, baseKnockback, offsetX, offs
     });
 }
 
-function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW, customH) {
+function shootProjectile(attacker, type, vx, vy, damage, customW, customH) {
     playSynthSound('shoot');
     let startX = attacker.x + (attacker.facing === 1 ? attacker.w + 10 : -20);
     let startY = attacker.y + attacker.h / 2 - (customH || (type === 'fireball' ? 18 : 6)) / 2;
@@ -406,7 +405,6 @@ function shootProjectile(attacker, type, vx, vy, damage, baseKnockback, customW,
         type: type,
         attackerId: attacker.id,
         damage: damage,
-        knockback: baseKnockback,
         life: 120 // 2 seconds
     };
     gameEngine.projectiles.push(proj);
@@ -541,7 +539,7 @@ function fireBlitzcrankHook(p, progress, keys) {
     const vx = (dirX / len) * speed;
     const vy = (dirY / len) * speed;
 
-    shootProjectile(p, 'hook', vx, vy, dmg, 0, 18, 18);
+    shootProjectile(p, 'hook', vx, vy, dmg, 18, 18);
 
     const lastProj = gameEngine.projectiles[gameEngine.projectiles.length - 1];
     if (lastProj && lastProj.type === 'hook') {
@@ -585,9 +583,49 @@ function getPlayerCooldownProgress(p) {
     } else if (p.charData.name === "Sett") {
         current = p.settCooldown || 0;
         max = 136;
+    } else if (p.charData.name === "Zoner") {
+        current = p.zonerRechargeTimer || 0;
+        max = 106;
     }
     
     return { current, max };
+}
+
+function triggerZonerSpecial(p, keys) {
+    let vx = p.facing * 14;
+    let vy = 0;
+    if (keys.up) {
+        if (keys.left || keys.right) {
+            vx = p.facing * 14 * 0.7;
+            vy = -14 * 0.7;
+        } else {
+            vx = 0;
+            vy = -14;
+        }
+    } else if (keys.down) {
+        if (keys.left || keys.right) {
+            vx = p.facing * 14 * 0.7;
+            vy = 14 * 0.7;
+        } else {
+            vx = 0;
+            vy = 14;
+        }
+    }
+
+    if (p.zonerCharge < 15) {
+        // Normal arrow
+        shootProjectile(p, 'arrow', vx, vy, 10);
+        p.zonerRechargeTimer = 64;
+    } else {
+        // Burst of arrows
+        const numArrows = Math.floor(2 + (p.zonerCharge / 100) * 8); // 2 to 10 arrows
+        p.zonerBurstCount = numArrows;
+        p.zonerBurstTimer = 0;
+        p.zonerBurstVx = vx;
+        p.zonerBurstVy = vy;
+        p.zonerRechargeTimer = 106;
+    }
+    p.zonerCharge = 0;
 }
 
 // Particle effect on death / launch
@@ -1252,7 +1290,7 @@ class SmashGame {
                 if (b.x <= nextTargetX) {
                     const attacker = this.players.find(pl => pl.id === b.attackerId);
                     if (attacker) {
-                        shootProjectile(attacker, 'bomb', 0, 8, 25, 16, 45, 45);
+                        shootProjectile(attacker, 'bomb', 0, 8, 25, 45, 45);
                         const lastProj = this.projectiles[this.projectiles.length - 1];
                         if (lastProj) {
                             lastProj.x = b.x + b.w / 2 - lastProj.w / 2;
@@ -1383,7 +1421,7 @@ class SmashGame {
                                     pr.grabbedPlayerId = pl.id;
                                     pr.vx = 0;
                                     pr.vy = 0;
-                                    createBlastParticles(pl.x, pl.y, '#eab308');
+                                    createBlastParticles(pl.x, pl.y, '#eab308', 8, 0.5);
                                 }
                             } else if (pr.type === 'bomberman_bomb') {
                                 continue;
@@ -1537,6 +1575,11 @@ class SmashGame {
         if (p.voladorCharge === undefined) p.voladorCharge = 0;
         if (p.zonerShots === undefined) p.zonerShots = 2;
         if (p.zonerRechargeTimer === undefined) p.zonerRechargeTimer = 0;
+        if (p.zonerCharge === undefined) p.zonerCharge = 0;
+        if (p.zonerBurstCount === undefined) p.zonerBurstCount = 0;
+        if (p.zonerBurstTimer === undefined) p.zonerBurstTimer = 0;
+        if (p.zonerBurstVx === undefined) p.zonerBurstVx = 0;
+        if (p.zonerBurstVy === undefined) p.zonerBurstVy = 0;
 
         if (p.velozCharge === undefined) p.velozCharge = 0;
         if (p.velozDashTimer === undefined) p.velozDashTimer = 0;
@@ -1576,11 +1619,14 @@ class SmashGame {
         if (p.bombermanCooldown > 0) p.bombermanCooldown--;
         if (p.terranovaCooldown > 0) p.terranovaCooldown--;
         if (p.settCooldown > 0) p.settCooldown--;
-        if (p.zonerRechargeTimer > 0) {
-            p.zonerRechargeTimer--;
-            if (p.zonerRechargeTimer === 0) {
-                const ctrlKeys = p.lastControlState || {};
-                p.zonerShots = ctrlKeys.up ? 4 : 2;
+        if (p.zonerRechargeTimer > 0) p.zonerRechargeTimer--;
+
+        if (p.zonerBurstCount > 0) {
+            p.zonerBurstTimer--;
+            if (p.zonerBurstTimer <= 0) {
+                shootProjectile(p, 'arrow', p.zonerBurstVx, p.zonerBurstVy, 5.5);
+                p.zonerBurstCount--;
+                p.zonerBurstTimer = 6;
             }
         }
 
@@ -1811,17 +1857,17 @@ class SmashGame {
                         let dmg = 9;
                         if (p.charData.phenotype === 'pesado') dmg = 7.5;
                         else if (p.charData.phenotype === 'balanceado') dmg = 8;
-                        triggerMeleeHitbox(p, 45, 60, dmg, 10, 0, -45); // Up Air/Tilt
+                        triggerMeleeHitbox(p, 45, 60, dmg, 0, -45); // Up Air/Tilt
                     } else if (keys.down) {
                         let dmg = 8;
                         if (p.charData.phenotype === 'pesado') dmg = 6.5;
                         else if (p.charData.phenotype === 'balanceado') dmg = 7;
-                        triggerMeleeHitbox(p, 65, 30, dmg, 9, 5, 20);  // Down sweep
+                        triggerMeleeHitbox(p, 65, 30, dmg, 5, 20);  // Down sweep
                     } else if (keys.left || keys.right) {
                         let dmg = 11;
                         if (p.charData.phenotype === 'pesado') dmg = 8.5;
                         else if (p.charData.phenotype === 'balanceado') dmg = 9;
-                        triggerMeleeHitbox(p, 60, 40, dmg, 12, 10, -5); // Smash Forward
+                        triggerMeleeHitbox(p, 60, 40, dmg, 10, -5); // Smash Forward
                     } else {
                         // Neutral Combo attack (3-step combo)
                         if (p.comboTimer > 0) {
@@ -1832,11 +1878,11 @@ class SmashGame {
                         p.comboTimer = 40; // 40 frames window to continue the combo
 
                         if (p.comboCount === 0) {
-                            triggerMeleeHitbox(p, 45, 30, 4, 3, 10, -5); // Hit 1: low dmg & low knockback
+                            triggerMeleeHitbox(p, 45, 30, 4, 10, -5); // Hit 1: low dmg & low knockback
                         } else if (p.comboCount === 1) {
-                            triggerMeleeHitbox(p, 45, 30, 4, 3, 10, -5); // Hit 2: low dmg & low knockback
+                            triggerMeleeHitbox(p, 45, 30, 4, 10, -5); // Hit 2: low dmg & low knockback
                         } else {
-                            triggerMeleeHitbox(p, 55, 35, 8, 12, 12, -5); // Hit 3: finisher, high dmg & high knockback
+                            triggerMeleeHitbox(p, 55, 35, 8, 12, -5); // Hit 3: finisher, high dmg & high knockback
                         }
                     }
                 } else if (keys.attackB && keys.up && !p.isGrounded && (!prevKeys.attackB || ((p.balanceadoCharge && p.balanceadoCharge > 0) || (p.velozCharge && p.velozCharge > 0)))) {
@@ -1865,7 +1911,6 @@ class SmashGame {
                                     // Auto fire at max charge (1.5 seconds)
                                     const progress = 1;
                                     const damage = Math.round(8 + progress * 10);
-                                    const knockback = Math.round(6 + progress * 6);
                                     const baseSpeed = 10 + progress * 3;
                                     const size = Math.round(18 + progress * 24);
 
@@ -1888,7 +1933,7 @@ class SmashGame {
                                             vy = baseSpeed;
                                         }
                                     }
-                                    shootProjectile(p, 'fireball', vx, vy, damage, knockback, size, size);
+                                    shootProjectile(p, 'fireball', vx, vy, damage, size, size);
 
                                     p.balanceadoCooldown = 40; // 0.67s cooldown
                                     p.balanceadoCharge = 0;
@@ -1897,7 +1942,6 @@ class SmashGame {
                                 // Released attackB
                                 const progress = Math.min(1, p.balanceadoCharge / 90);
                                 const damage = Math.round(8 + progress * 10);
-                                const knockback = Math.round(6 + progress * 6);
                                 const baseSpeed = 10 + progress * 3;
                                 const size = Math.round(18 + progress * 24);
 
@@ -1920,7 +1964,7 @@ class SmashGame {
                                         vy = baseSpeed;
                                     }
                                 }
-                                shootProjectile(p, 'fireball', vx, vy, damage, knockback, size, size);
+                                shootProjectile(p, 'fireball', vx, vy, damage, size, size);
 
                                 p.balanceadoCooldown = 40;
                                 p.balanceadoCharge = 0;
@@ -1940,7 +1984,7 @@ class SmashGame {
                                         const progress = 1.0;
                                         const dmg = Math.round(12 + progress * 10);
                                         const size = Math.round(16 + progress * 24);
-                                        shootProjectile(p, 'bomb', 0, 10, dmg, 10, size, size);
+                                        shootProjectile(p, 'bomb', 0, 10, dmg, size, size);
                                         p.voladorBombCooldown = 30;
                                         p.voladorCharge = 0;
                                     }
@@ -1948,20 +1992,27 @@ class SmashGame {
                                     const progress = Math.min(1.0, p.voladorCharge / 45);
                                     const dmg = Math.round(12 + progress * 10);
                                     const size = Math.round(16 + progress * 24);
-                                    shootProjectile(p, 'bomb', 0, 10, dmg, 10, size, size);
+                                    shootProjectile(p, 'bomb', 0, 10, dmg, size, size);
                                     p.voladorBombCooldown = Math.round(16 + progress * 14);
                                     p.voladorCharge = 0;
                                 }
                             }
                         }
                     } else if (p.charData.name === "Zoner") {
-                        if (keys.attackB && !prevKeys.attackB && (!keys.up || p.isGrounded || p.upSpecialUsed)) {
-                            const minShotVal = keys.up ? -2 : 0;
-                            if (p.zonerShots > minShotVal) {
-                                p.charData.specials.neutral(p);
-                                p.zonerShots--;
-                                p.zonerRechargeTimer = 40; // Reset recharge timer to 0.67s
+                        if (p.zonerRechargeTimer <= 0 && p.zonerBurstCount <= 0 && (!keys.up || p.isGrounded || p.upSpecialUsed)) {
+                            if (keys.attackB) {
+                                p.zonerCharge++;
+                                p.vx = 0;
+                                if (p.vy > 0) p.vy = 0.5; // Slow fall during charging
+
+                                if (p.zonerCharge >= 100) {
+                                    triggerZonerSpecial(p, keys);
+                                }
+                            } else if (p.zonerCharge > 0) {
+                                triggerZonerSpecial(p, keys);
                             }
+                        } else {
+                            p.zonerCharge = 0;
                         }
                     } else if (p.charData.name === "Sonic") {
                         if (p.velozDashTimer === 0 && (!p.isGrounded ? !p.velozDashUsed : true)) {
@@ -2067,7 +2118,7 @@ class SmashGame {
                                 if (p.bombermanCharge >= 45) {
                                     const progress = 1.0;
                                     const size = Math.round(20 + progress * 20);
-                                    shootProjectile(p, 'bomberman_bomb', p.facing * 1.5, -2, 0, 0, size, size);
+                                    shootProjectile(p, 'bomberman_bomb', p.facing * 1.5, -2, 0, size, size);
                                     const lastP = gameEngine.projectiles[gameEngine.projectiles.length - 1];
                                     if (lastP && lastP.type === 'bomberman_bomb') {
                                         lastP.explosionRadius = Math.round(80 + progress * 100);
@@ -2079,7 +2130,7 @@ class SmashGame {
                             } else if (p.bombermanCharge > 0) {
                                 const progress = Math.min(1.0, p.bombermanCharge / 45);
                                 const size = Math.round(20 + progress * 20);
-                                shootProjectile(p, 'bomberman_bomb', p.facing * 1.5, -2, 0, 0, size, size);
+                                shootProjectile(p, 'bomberman_bomb', p.facing * 1.5, -2, 0, size, size);
                                 const lastP = gameEngine.projectiles[gameEngine.projectiles.length - 1];
                                 if (lastP && lastP.type === 'bomberman_bomb') {
                                     lastP.explosionRadius = Math.round(80 + progress * 100);
@@ -2272,7 +2323,7 @@ class SmashGame {
                 const fallBonus = Math.min(9, (fallDistance / 110) * 2);
                 const finalDmg = Math.round(6 + chargeBonus + fallBonus);
 
-                triggerMeleeHitbox(p, 90, 40, finalDmg, finalDmg * 0.8, 0, 10);
+                triggerMeleeHitbox(p, 90, 40, finalDmg, 0, 10);
                 playSynthSound('heavy_hit');
             }
         }
@@ -3209,6 +3260,24 @@ class SmashGame {
                 this.ctx.arc(p.x + p.w / 2, p.y - 12, radius, 0, Math.PI * 2);
                 this.ctx.fill();
                 this.ctx.stroke();
+            }
+
+            // Draw charging effect for Zoner
+            if (p.charData.name === "Zoner" && p.zonerCharge > 0) {
+                const chargeProgress = Math.min(1, p.zonerCharge / 100);
+                this.ctx.save();
+                this.ctx.fillStyle = `rgba(52, 211, 153, ${0.4 + chargeProgress * 0.5})`;
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                for (let i = 0; i < 3; i++) {
+                    const py = p.y + p.h - ((Date.now() / 15 + i * 20) % 40);
+                    const px = p.x + p.w / 2 + (Math.sin(py * 0.1) * 12);
+                    this.ctx.beginPath();
+                    this.ctx.arc(px, py, 1.0 + chargeProgress * 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
+                this.ctx.restore();
             }
 
             // Draw charging effect for Terranova
