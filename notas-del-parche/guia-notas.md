@@ -67,3 +67,9 @@ git tag -a vaa.bb.cc -m "Parche público aa.bb.cc"
 ```bash
 git push origin <rama-actual> --tags
 ```
+
+## Versión mostrada en el juego
+Por cada lanzamiento de un parche o miniparche, en el juego se debe actualizar la parte de index.html que muestra algo como             <div
+                style="position: absolute; bottom: 15px; right: 20px; font-size: 0.85rem; color: #64748b; font-family: 'Outfit', sans-serif; pointer-events: none;">
+                vaa.bb.cc.dd</div>
+poniendo la última versión  

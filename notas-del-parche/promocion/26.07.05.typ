@@ -3,7 +3,7 @@
 #show: doc => afiche-parche(
   parche: "26.7.5",
   fecha: "23 de Julio, 2026",
-  doc
+  doc,
 )
 
 #seccion("🔥 NUEVAS CARACTERÍSTICAS Y SISTEMAS DE COMBATE")
