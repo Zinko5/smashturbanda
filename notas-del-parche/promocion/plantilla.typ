@@ -5,7 +5,8 @@
   body,
 ) = {
   set page(
-    paper: "a4",
+    width: 25cm,
+    height: auto,
     margin: (x: 2cm, y: 2.5cm),
     fill: rgb("#0b0c10"), // Slate black background matching the game
   )
