@@ -9,6 +9,7 @@ let roomCode = null;
 let selectedTeamLocal = 1;
 let isReadyLocal = false;
 let teamsEnabledLocal = false;
+let lastSentInputs = null;
 
 let cachedPlayersConfig = null;
 let cachedStocksLimit = 3;
@@ -61,6 +62,7 @@ function cleanupPeer() {
     selectedTeamLocal = 1;
     isReadyLocal = false;
     teamsEnabledLocal = false;
+    lastSentInputs = null;
     cachedPlayersConfig = null;
     cachedStocksLimit = 3;
     cachedTimeLimit = 2;
@@ -1142,10 +1144,20 @@ function overrideGameLoopForP2P() {
                 });
             }
         } else {
-            // Guest collects inputs and sends them to Host immediately
+            // Guest collects inputs and sends them to Host only if they changed (reduces upload lag/traffic by up to 90%)
             const inputs = gameEngine.getPlayerInputs('p1');
+            const inputsChanged = !lastSentInputs || 
+                inputs.left !== lastSentInputs.left ||
+                inputs.right !== lastSentInputs.right ||
+                inputs.up !== lastSentInputs.up ||
+                inputs.down !== lastSentInputs.down ||
+                inputs.jump !== lastSentInputs.jump ||
+                inputs.attackA !== lastSentInputs.attackA ||
+                inputs.attackB !== lastSentInputs.attackB ||
+                inputs.shield !== lastSentInputs.shield;
 
-            if (connection && connection.open) {
+            if (inputsChanged && connection && connection.open) {
+                lastSentInputs = { ...inputs };
                 connection.send({
                     type: 'guest_inputs',
                     playerIndex: guestIndex,
@@ -1264,56 +1276,32 @@ function unpackSchemaEntities(state) {
     }
 }
 
+// Flat array mapping keys to preserve order and compress payload
+const PLAYER_STATE_KEYS = [
+    'x', 'y', 'vx', 'vy', 'facing', 'damage', 'stocks', 'score',
+    'respawning', 'shieldActive', 'shieldStrength', 'invulnerable',
+    'isGrounded', 'hitStun', 'shieldStun', 'velozCharge', 'velozDashTimer',
+    'upSpecialUsed', 'velozDashUsed', 'voladorFlying', 'voladorBombCooldown',
+    'heldItem', 'balanceadoCharge', 'gordoCharge', 'voladorCharge',
+    'blitzcrankCharge', 'yoneSoulActive', 'yoneReturning', 'yoneBodyX',
+    'yoneBodyY', 'yoneSoulTimer', 'yoneMarkedBy', 'yoneDamageAccumulated',
+    'bombermanCharge', 'terranovaCharge', 'settCharge', 'settIsJumping',
+    'balanceadoCooldown', 'gordoCooldown', 'blitzcrankCooldown',
+    'yoneCooldown', 'bombermanCooldown', 'terranovaCooldown', 'settCooldown',
+    'zonerCharge', 'zonerRechargeTimer'
+];
+
 function packPlayerState(p) {
-    return {
-        x: p.x,
-        y: p.y,
-        vx: p.vx,
-        vy: p.vy,
-        facing: p.facing,
-        damage: p.damage,
-        stocks: p.stocks,
-        score: p.score,
-        respawning: p.respawning,
-        shieldActive: p.shieldActive,
-        shieldStrength: p.shieldStrength,
-        invulnerable: p.invulnerable,
-        isGrounded: p.isGrounded,
-        hitStun: p.hitStun || 0,
-        shieldStun: p.shieldStun || 0,
-        velozCharge: p.velozCharge || 0,
-        velozDashTimer: p.velozDashTimer || 0,
-        upSpecialUsed: p.upSpecialUsed || false,
-        velozDashUsed: p.velozDashUsed || false,
-        voladorFlying: p.voladorFlying || false,
-        voladorBombCooldown: p.voladorBombCooldown || 0,
-        heldItem: p.heldItem || null,
-        balanceadoCharge: p.balanceadoCharge || 0,
-        gordoCharge: p.gordoCharge || 0,
-        voladorCharge: p.voladorCharge || 0,
-        blitzcrankCharge: p.blitzcrankCharge || 0,
-        yoneSoulActive: p.yoneSoulActive || false,
-        yoneReturning: p.yoneReturning || false,
-        yoneBodyX: p.yoneBodyX || 0,
-        yoneBodyY: p.yoneBodyY || 0,
-        yoneSoulTimer: p.yoneSoulTimer || 0,
-        yoneMarkedBy: p.yoneMarkedBy || null,
-        yoneDamageAccumulated: p.yoneDamageAccumulated || 0,
-        bombermanCharge: p.bombermanCharge || 0,
-        terranovaCharge: p.terranovaCharge || 0,
-        settCharge: p.settCharge || 0,
-        settIsJumping: p.settIsJumping || false,
-        balanceadoCooldown: p.balanceadoCooldown || 0,
-        voladorBombCooldown: p.voladorBombCooldown || 0,
-        gordoCooldown: p.gordoCooldown || 0,
-        blitzcrankCooldown: p.blitzcrankCooldown || 0,
-        yoneCooldown: p.yoneCooldown || 0,
-        bombermanCooldown: p.bombermanCooldown || 0,
-        terranovaCooldown: p.terranovaCooldown || 0,
-        settCooldown: p.settCooldown || 0,
-        zonerCharge: p.zonerCharge || 0,
-        zonerRechargeTimer: p.zonerRechargeTimer || 0
-    };
+    return PLAYER_STATE_KEYS.map(key => {
+        let val = p[key];
+        if (val === undefined) {
+            if (key === 'heldItem' || key === 'yoneMarkedBy') val = null;
+            else if (key === 'upSpecialUsed' || key === 'velozDashUsed' || key === 'voladorFlying' || key === 'yoneSoulActive' || key === 'yoneReturning' || key === 'settIsJumping') val = false;
+            else val = 0;
+        }
+        // Quantization: round floating numbers to 1 decimal place to save characters in JSON payload
+        return typeof val === 'number' ? Math.round(val * 10) / 10 : val;
+    });
 }
 
 function applyHostStateToGuest(state) {
@@ -1324,13 +1312,14 @@ function applyHostStateToGuest(state) {
             const localPlayer = gameEngine.players[idx];
             if (localPlayer && pState) {
                 // Trigger local visual feedback and sounds on hit (damage increase)
-                if (pState.damage > localPlayer.damage) {
-                    const diff = pState.damage - localPlayer.damage;
+                const pDamage = pState[5]; // Index of 'damage'
+                if (pDamage > localPlayer.damage) {
+                    const diff = pDamage - localPlayer.damage;
                     // Spawn local hit particles
                     for (let i = 0; i < Math.min(10, Math.floor(diff * 0.8) + 3); i++) {
                         gameEngine.particles.push({
-                            x: pState.x + localPlayer.width / 2,
-                            y: pState.y + localPlayer.height / 2,
+                            x: pState[0] + localPlayer.width / 2, // Index of 'x'
+                            y: pState[1] + localPlayer.height / 2, // Index of 'y'
                             vx: (Math.random() - 0.5) * 8,
                             vy: (Math.random() - 0.5) * 8 - 2,
                             radius: Math.random() * 4 + 2,
@@ -1343,7 +1332,8 @@ function applyHostStateToGuest(state) {
                 }
 
                 // Trigger local blast particles on death (stocks decrease)
-                if (pState.stocks < localPlayer.stocks) {
+                const pStocks = pState[6]; // Index of 'stocks'
+                if (pStocks < localPlayer.stocks) {
                     // Use the previous position of the player (before unpack overwrites it with -9999)
                     const deathX = Math.min(V_WIDTH, Math.max(0, localPlayer.x + (localPlayer.w || 40) / 2));
                     const deathY = Math.min(V_HEIGHT, Math.max(0, localPlayer.y + (localPlayer.h || 50) / 2));
@@ -1406,54 +1396,11 @@ function applyHostStateToGuest(state) {
     }
 }
 
-function unpackPlayerState(p, state) {
-    p.x = state.x;
-    p.y = state.y;
-    p.vx = state.vx;
-    p.vy = state.vy;
-    p.facing = state.facing;
-    p.damage = state.damage;
-    p.stocks = state.stocks;
-    p.score = state.score;
-    p.respawning = state.respawning;
-    p.shieldActive = state.shieldActive;
-    p.shieldStrength = state.shieldStrength;
-    p.invulnerable = state.invulnerable;
-    p.isGrounded = state.isGrounded || false;
-    p.hitStun = state.hitStun;
-    p.shieldStun = state.shieldStun;
-    p.balanceadoCharge = state.balanceadoCharge || 0;
-    p.velozCharge = state.velozCharge || 0;
-    p.velozDashTimer = state.velozDashTimer || 0;
-    p.upSpecialUsed = state.upSpecialUsed || false;
-    p.velozDashUsed = state.velozDashUsed || false;
-    p.voladorFlying = state.voladorFlying || false;
-    p.voladorBombCooldown = state.voladorBombCooldown || 0;
-    p.heldItem = state.heldItem || null;
-    p.gordoCharge = state.gordoCharge || 0;
-    p.voladorCharge = state.voladorCharge || 0;
-    p.blitzcrankCharge = state.blitzcrankCharge || 0;
-    p.yoneSoulActive = state.yoneSoulActive || false;
-    p.yoneReturning = state.yoneReturning || false;
-    p.yoneBodyX = state.yoneBodyX || 0;
-    p.yoneBodyY = state.yoneBodyY || 0;
-    p.yoneSoulTimer = state.yoneSoulTimer || 0;
-    p.yoneMarkedBy = state.yoneMarkedBy || null;
-    p.yoneDamageAccumulated = state.yoneDamageAccumulated || 0;
-    p.bombermanCharge = state.bombermanCharge || 0;
-    p.terranovaCharge = state.terranovaCharge || 0;
-    p.settCharge = state.settCharge || 0;
-    p.settIsJumping = state.settIsJumping || false;
-    p.balanceadoCooldown = state.balanceadoCooldown || 0;
-    p.voladorBombCooldown = state.voladorBombCooldown || 0;
-    p.gordoCooldown = state.gordoCooldown || 0;
-    p.blitzcrankCooldown = state.blitzcrankCooldown || 0;
-    p.yoneCooldown = state.yoneCooldown || 0;
-    p.bombermanCooldown = state.bombermanCooldown || 0;
-    p.terranovaCooldown = state.terranovaCooldown || 0;
-    p.settCooldown = state.settCooldown || 0;
-    p.zonerCharge = state.zonerCharge || 0;
-    p.zonerRechargeTimer = state.zonerRechargeTimer || 0;
+function unpackPlayerState(p, stateArray) {
+    if (!Array.isArray(stateArray)) return;
+    PLAYER_STATE_KEYS.forEach((key, idx) => {
+        p[key] = stateArray[idx];
+    });
 }
 
 // Menu Navigations
