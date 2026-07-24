@@ -2124,7 +2124,7 @@ class SmashGame {
                                         lastP.explosionRadius = Math.round(80 + progress * 100);
                                         lastP.life = 130;
                                     }
-                                    p.bombermanCooldown = 94;
+                                    p.bombermanCooldown = 45;
                                     p.bombermanCharge = 0;
                                 }
                             } else if (p.bombermanCharge > 0) {
@@ -2136,7 +2136,7 @@ class SmashGame {
                                     lastP.explosionRadius = Math.round(80 + progress * 100);
                                     lastP.life = 130;
                                 }
-                                p.bombermanCooldown = 94;
+                                p.bombermanCooldown = 45;
                                 p.bombermanCharge = 0;
                             }
                         }
@@ -2156,7 +2156,7 @@ class SmashGame {
                                     const xMini1 = p.x + (p.facing === 1 ? p.w + 25 : -57);
                                     const xMini2 = p.x + (p.facing === 1 ? p.w + 58 : -90);
 
-                                    const damage = Math.round(5 + progress * 10);
+                                    const damage = Math.round(8 + progress * 12);
 
                                     const wallMain = {
                                         x: xMain, y: p.y + p.h - 1, w: w, h: 1,
@@ -2190,7 +2190,7 @@ class SmashGame {
                                 const xMini1 = p.x + (p.facing === 1 ? p.w + 25 : -57);
                                 const xMini2 = p.x + (p.facing === 1 ? p.w + 58 : -90);
 
-                                const damage = Math.round(5 + progress * 10);
+                                const damage = Math.round(8 + progress * 12);
 
                                 const wallMain = {
                                     x: xMain, y: p.y + p.h - 1, w: w, h: 1,
@@ -2258,7 +2258,7 @@ class SmashGame {
                                         p.vy = -9;
                                         p.vx = p.facing * (8 + progress * 10);
                                         p.settCharge = 0;
-                                        p.settCooldown = 136;
+                                        p.settCooldown = 180;
                                         playSynthSound('jump');
                                     }
                                 } else if (p.settCharge > 0) {
@@ -2270,7 +2270,7 @@ class SmashGame {
                                     p.vy = -9;
                                     p.vx = p.facing * (8 + progress * 10);
                                     p.settCharge = 0;
-                                    p.settCooldown = 136;
+                                    p.settCooldown = 180;
                                     playSynthSound('jump');
                                 }
                             }

@@ -80,11 +80,37 @@ function initMultiplayer(asHost = true) {
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
     const tryConnect = (code) => {
+        const peerOptions = {
+            config: {
+                iceServers: [
+                    {
+                        urls: [
+                            'stun:stun.l.google.com:19302',
+                            'stun:stun1.l.google.com:19302',
+                            'stun:stun2.l.google.com:19302',
+                            'stun:stun3.l.google.com:19302',
+                            'stun:stun4.l.google.com:19302',
+                        ]
+                    },
+                    {
+                        urls: [
+                            'turn:openrelay.metered.ca:80',
+                            'turn:openrelay.metered.ca:443',
+                            'turn:openrelay.metered.ca:3478?transport=udp',
+                            'turn:openrelay.metered.ca:3478?transport=tcp',
+                        ],
+                        username: 'openrelayproject',
+                        credential: 'openrelayproject'
+                    }
+                ]
+            }
+        };
+
         if (asHost) {
             const customId = 'smashturbanda-' + code;
-            peer = new Peer(customId);
+            peer = new Peer(customId, peerOptions);
         } else {
-            peer = new Peer();
+            peer = new Peer(peerOptions);
         }
 
         peer.on('open', (id) => {
