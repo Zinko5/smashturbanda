@@ -225,10 +225,16 @@ async function initMultiplayer(asHost = true) {
         peer.on('open', (id) => {
             console.log(`[DEBUG] PeerJS instance OPEN. Assigned ID: ${id}`);
             if (asHost) {
-                myId = code;
-                roomCode = code;
-                document.getElementById('my-id').textContent = code;
-                showToast("¡Lobby listo! Código: " + code);
+                if (id.startsWith('smashturbanda-')) {
+                    const actualCode = id.substring('smashturbanda-'.length);
+                    myId = actualCode;
+                    roomCode = actualCode;
+                } else {
+                    myId = id;
+                    roomCode = id;
+                }
+                document.getElementById('my-id').textContent = roomCode;
+                showToast("¡Lobby listo! Código: " + roomCode);
             } else {
                 myId = id;
             }
@@ -339,8 +345,8 @@ document.getElementById('peer-id-input').addEventListener('keydown', (e) => {
 // ESCENARIO B: Nos conectamos a alguien (Invitado / Guest)
 document.getElementById('btn-connect-peer').addEventListener('click', () => {
     const code = document.getElementById('peer-id-input').value.trim();
-    if (!code || code.length !== 4 || isNaN(code)) {
-        showToast("Por favor introduce un código de 4 dígitos válido");
+    if (!code || code.length < 4) {
+        showToast("Por favor introduce un código de sala válido");
         return;
     }
 
@@ -349,7 +355,7 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     connectBtn.disabled = true;
 
     showToast("Conectando...");
-    const targetPeerId = 'smashturbanda-' + code;
+    const targetPeerId = (code.length === 4 && !isNaN(code)) ? ('smashturbanda-' + code) : code;
     console.log(`[DEBUG] Guest attempting to connect to: ${targetPeerId}`);
 
     if (!peer || peer.destroyed) {
