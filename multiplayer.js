@@ -130,12 +130,15 @@ async function initMultiplayer(asHost = true) {
         console.error("Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
     }
 
+    console.log("[DEBUG] Configured ICE Servers:", iceServers);
+
     const tryConnect = (code) => {
         const peerOptions = {
             config: {
                 iceServers: iceServers
             }
         };
+        console.log(`[DEBUG] Attempting PeerJS creation. As Host: ${asHost}, Options:`, peerOptions);
 
         if (asHost) {
             const customId = 'smashturbanda-' + code;
@@ -145,6 +148,7 @@ async function initMultiplayer(asHost = true) {
         }
 
         peer.on('open', (id) => {
+            console.log(`[DEBUG] PeerJS instance OPEN. Assigned ID: ${id}`);
             if (asHost) {
                 myId = code;
                 roomCode = code;
@@ -157,6 +161,9 @@ async function initMultiplayer(asHost = true) {
 
         // ESCENARIO A: Alguien se conecta a nosotros (Anfitrión / Host)
         peer.on('connection', (conn) => {
+            console.log(`[DEBUG] Host received connection request from: ${conn.peer}`);
+            if (typeof debugConnection === 'function') debugConnection(conn, "Host-Side");
+
             if (connections.length >= 3) {
                 const rejectLobby = () => {
                     conn.send({ type: 'lobby_full' });
@@ -262,7 +269,9 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
 
     showToast("Conectando...");
     const targetPeerId = 'smashturbanda-' + code;
+    console.log(`[DEBUG] Guest attempting to connect to: ${targetPeerId}`);
     connection = peer.connect(targetPeerId);
+    if (typeof debugConnection === 'function') debugConnection(connection, "Guest-Side");
     isHost = false;
 
     connection.on('open', () => {
@@ -1834,5 +1843,80 @@ if (document.readyState === 'loading') {
     initVolumeControl();
     updateControlsQuickRef();
     initLobbyUI();
+}
+
+// ==========================================
+// WebRTC DEBUG SUITE
+// ==========================================
+function debugConnection(conn, label) {
+    console.log(`%c[DEBUG - ${label}] Connection Object:`, 'color: #38bdf8; font-weight: bold;', conn);
+    
+    conn.on('open', () => {
+        console.log(`%c[DEBUG - ${label}] Connection OPEN event fired. Peer ID: ${conn.peer}`, 'color: #4ade80; font-weight: bold;');
+        if (conn.peerConnection) {
+            monitorRTCPeerConnection(conn.peerConnection, label);
+        } else {
+            console.warn(`[DEBUG - ${label}] No peerConnection object available on open.`);
+        }
+    });
+    
+    conn.on('data', (data) => {
+        console.log(`[DEBUG - ${label}] Data packet received of type: ${data.type || typeof data}`);
+    });
+    
+    conn.on('close', () => {
+        console.log(`%c[DEBUG - ${label}] Connection CLOSE event fired.`, 'color: #f87171; font-weight: bold;');
+    });
+    
+    conn.on('error', (err) => {
+        console.error(`%c[DEBUG - ${label}] Connection ERROR event:`, 'color: #ef4444; font-weight: bold;', err);
+    });
+
+    let checkInterval = setInterval(() => {
+        if (conn.peerConnection) {
+            clearInterval(checkInterval);
+            monitorRTCPeerConnection(conn.peerConnection, label);
+        }
+    }, 100);
+    setTimeout(() => clearInterval(checkInterval), 15000);
+}
+
+function monitorRTCPeerConnection(pc, label) {
+    console.log(`%c[DEBUG - ${label}] Monitoring RTCPeerConnection:`, 'color: #a855f7;', pc);
+    console.log(`[DEBUG - ${label}] Initial States -> Connection: ${pc.connectionState}, ICE: ${pc.iceConnectionState}, Gathering: ${pc.iceGatheringState}`);
+    
+    pc.onconnectionstatechange = () => {
+        console.log(`[DEBUG - ${label}] RTCPeerConnection ConnectionState: ${pc.connectionState}`);
+    };
+    
+    pc.oniceconnectionstatechange = () => {
+        console.log(`[DEBUG - ${label}] RTCPeerConnection ICEConnectionState: ${pc.iceConnectionState}`);
+        if (pc.iceConnectionState === 'failed') {
+            console.error(`[DEBUG - ${label}] ICE Negotiation FAILED!`);
+            if (pc.localDescription) {
+                console.log(`[DEBUG - ${label}] Local SDP:`, pc.localDescription.sdp);
+            }
+            if (pc.remoteDescription) {
+                console.log(`[DEBUG - ${label}] Remote SDP:`, pc.remoteDescription.sdp);
+            }
+        }
+    };
+    
+    pc.onicegatheringstatechange = () => {
+        console.log(`[DEBUG - ${label}] RTCPeerConnection ICEGatheringState: ${pc.iceGatheringState}`);
+    };
+    
+    pc.onsignalingstatechange = () => {
+        console.log(`[DEBUG - ${label}] RTCPeerConnection SignalingState: ${pc.signalingState}`);
+    };
+
+    // Monitor gathered candidates
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            console.log(`[DEBUG - ${label}] Local ICE Candidate gathered:`, event.candidate.candidate);
+        } else {
+            console.log(`[DEBUG - ${label}] ICE Candidate gathering complete.`);
+        }
+    };
 }
 
