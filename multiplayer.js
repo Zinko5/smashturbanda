@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.07.06.09';
+const GAME_VERSION = '26.07.06.10';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
