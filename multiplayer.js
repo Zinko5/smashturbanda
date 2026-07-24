@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.07.06.11';
+const GAME_VERSION = '26.07.06.12';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -82,8 +82,8 @@ async function initMultiplayer(asHost = true) {
 
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
-    // Generate dynamic TURN credentials using the Open Relay secret
-    // Split into individual single-URL objects for maximum PeerJS parser compatibility
+    // Default to reliable public STUN servers for standard NAT traversal.
+    // We avoid broken/expired public TURN servers by default, as they cause browsers to abort ICE candidate pairing on error.
     let iceServers = [
         {
             urls: [
@@ -96,64 +96,7 @@ async function initMultiplayer(asHost = true) {
         }
     ];
 
-    try {
-        const secret = 'openrelayprojectsecret';
-        const unixTime = Math.floor(Date.now() / 1000) + 24 * 3600; // 24 hours duration
-        const username = `${unixTime}:openrelayproject`;
-
-        const encoder = new TextEncoder();
-        const keyData = encoder.encode(secret);
-        const messageData = encoder.encode(username);
-
-        const cryptoKey = await window.crypto.subtle.importKey(
-            "raw",
-            keyData,
-            { name: "HMAC", hash: "SHA-1" },
-            false,
-            ["sign"]
-        );
-
-        const signature = await window.crypto.subtle.sign(
-            "HMAC",
-            cryptoKey,
-            messageData
-        );
-
-        const hashArray = Array.from(new Uint8Array(signature));
-        const hashString = String.fromCharCode.apply(null, hashArray);
-        const credential = btoa(hashString);
-
-        iceServers.push({
-            urls: [
-                'turn:staticauth.openrelay.metered.ca:80',
-                'turn:staticauth.openrelay.metered.ca:80?transport=udp',
-                'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
-                'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
-                'turns:staticauth.openrelay.metered.ca:443?transport=udp',
-                'turns:staticauth.openrelay.metered.ca:443'
-            ],
-            username: username,
-            credential: credential
-        });
-    } catch (e) {
-        console.error("[DEBUG] Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
-    }
-
-    // Add static fallback credentials for Open Relay
-    iceServers.push({
-        urls: [
-            'turn:openrelay.metered.ca:80',
-            'turn:openrelay.metered.ca:80?transport=udp',
-            'turn:openrelay.metered.ca:80?transport=tcp',
-            'turns:openrelay.metered.ca:443?transport=tcp',
-            'turns:openrelay.metered.ca:443?transport=udp',
-            'turns:openrelay.metered.ca:443'
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    });
-
-    // Add custom user-configured TURN server if present
+    // Add custom user-configured TURN server if present (e.g. if the user wants strict P2P/mobile data relay)
     const customUrl = localStorage.getItem('smashturbanda_turn_url');
     const customUser = localStorage.getItem('smashturbanda_turn_username');
     const customCred = localStorage.getItem('smashturbanda_turn_credential');
