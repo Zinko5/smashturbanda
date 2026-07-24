@@ -1,3 +1,4 @@
+const GAME_VERSION = '26.07.24';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -124,7 +125,27 @@ async function initMultiplayer(asHost = true) {
             credential: credential
         });
         iceServers.push({
+            urls: 'turn:staticauth.openrelay.metered.ca:80?transport=udp',
+            username: username,
+            credential: credential
+        });
+        iceServers.push({
+            urls: 'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
+            username: username,
+            credential: credential
+        });
+        iceServers.push({
             urls: 'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
+            username: username,
+            credential: credential
+        });
+        iceServers.push({
+            urls: 'turns:staticauth.openrelay.metered.ca:443?transport=udp',
+            username: username,
+            credential: credential
+        });
+        iceServers.push({
+            urls: 'turns:staticauth.openrelay.metered.ca:443',
             username: username,
             credential: credential
         });
@@ -202,6 +223,12 @@ async function initMultiplayer(asHost = true) {
                 showToast(`¡Jugador ${connections.length + 1} conectado!`);
                 document.getElementById('menu-lobby').classList.add('hidden');
                 document.getElementById('menu-css').classList.remove('hidden');
+
+                // Send version check
+                conn.send({
+                    type: 'version_check',
+                    version: GAME_VERSION
+                });
 
                 // Assign index to guest
                 conn.send({
@@ -295,6 +322,13 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     connection.on('open', () => {
         roomCode = code;
         showToast("Conectado con el servidor. Esperando asignación...");
+
+        // Send version check
+        connection.send({
+            type: 'version_check',
+            version: GAME_VERSION
+        });
+
         document.getElementById('menu-lobby').classList.add('hidden');
         document.getElementById('menu-css').classList.remove('hidden');
         connectBtn.textContent = "Conectar a Sala";
@@ -302,7 +336,7 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     });
 
     connection.on('data', (data) => {
-        handleReceivedData(data);
+        handleReceivedData(data, connection);
     });
 
     connection.on('close', () => {
@@ -780,6 +814,21 @@ function broadcast(data) {
 
 // Custom handler for game messages
 function handleReceivedData(data, senderConn) {
+    if (data.type === 'version_check') {
+        console.log(`[DEBUG] Received version check: ${data.version}. Local: ${GAME_VERSION}`);
+        if (data.version !== GAME_VERSION) {
+            showToast(`Versión incompatible (Oponente: v${data.version}, Tú: v${GAME_VERSION}). Actualiza la página.`);
+            if (senderConn) {
+                try { senderConn.close(); } catch(e){}
+            }
+            if (!isHost) {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 4000);
+            }
+        }
+        return;
+    }
     if (data.type === 'assign_player') {
         guestIndex = data.playerIndex;
         document.getElementById('css-title').textContent = `Elige tu Personaje (P${guestIndex + 1})`;
@@ -1921,6 +1970,7 @@ function monitorRTCPeerConnection(pc, label) {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ICEConnectionState: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'failed') {
             console.error(`[DEBUG - ${label}] ICE Negotiation FAILED!`);
+            showToast("Conexión WebRTC fallida (ICE failed). Si usas la misma Wi-Fi, intenta usar datos móviles en el celular.");
             if (pc.localDescription) {
                 console.log(`[DEBUG - ${label}] Local SDP:`, pc.localDescription.sdp);
             }
