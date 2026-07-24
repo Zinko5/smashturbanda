@@ -2156,7 +2156,7 @@ class SmashGame {
                                     const xMini1 = p.x + (p.facing === 1 ? p.w + 25 : -57);
                                     const xMini2 = p.x + (p.facing === 1 ? p.w + 58 : -90);
 
-                                    const damage = Math.round(8 + progress * 12);
+                                    const damage = Math.round(10 + progress * 12);
 
                                     const wallMain = {
                                         x: xMain, y: p.y + p.h - 1, w: w, h: 1,
@@ -2190,7 +2190,7 @@ class SmashGame {
                                 const xMini1 = p.x + (p.facing === 1 ? p.w + 25 : -57);
                                 const xMini2 = p.x + (p.facing === 1 ? p.w + 58 : -90);
 
-                                const damage = Math.round(8 + progress * 12);
+                                const damage = Math.round(10 + progress * 12);
 
                                 const wallMain = {
                                     x: xMain, y: p.y + p.h - 1, w: w, h: 1,
