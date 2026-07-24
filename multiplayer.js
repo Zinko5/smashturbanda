@@ -86,7 +86,10 @@ async function initMultiplayer(asHost = true) {
         {
             urls: [
                 'stun:stun.l.google.com:19302',
-                'stun:openrelay.metered.ca:80'
+                'stun:stun1.l.google.com:19302',
+                'stun:stun2.l.google.com:19302',
+                'stun:stun3.l.google.com:19302',
+                'stun:stun4.l.google.com:19302'
             ]
         }
     ];
@@ -128,6 +131,19 @@ async function initMultiplayer(asHost = true) {
         });
     } catch (e) {
         console.error("[DEBUG] Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
+    }
+
+    // Add custom user-configured TURN server if present
+    const customUrl = localStorage.getItem('smashturbanda_turn_url');
+    const customUser = localStorage.getItem('smashturbanda_turn_username');
+    const customCred = localStorage.getItem('smashturbanda_turn_credential');
+    if (customUrl && customUser && customCred) {
+        console.log("[DEBUG] Found Custom User TURN Server in localStorage:", customUrl);
+        iceServers.push({
+            urls: customUrl.split(',').map(u => u.trim()),
+            username: customUser,
+            credential: customCred
+        });
     }
 
     console.log("[DEBUG] Configured ICE Servers Details:", JSON.stringify(iceServers, null, 2));
@@ -1515,6 +1531,11 @@ document.getElementById('btn-options-menu').addEventListener('click', () => {
     document.getElementById('menu-options').classList.remove('hidden');
     if (typeof playMenuMusic === 'function') playMenuMusic();
     renderOptionsKeys();
+
+    // Populate custom TURN settings
+    document.getElementById('input-turn-url').value = localStorage.getItem('smashturbanda_turn_url') || '';
+    document.getElementById('input-turn-username').value = localStorage.getItem('smashturbanda_turn_username') || '';
+    document.getElementById('input-turn-credential').value = localStorage.getItem('smashturbanda_turn_credential') || '';
 });
 
 document.getElementById('slider-sfx').addEventListener('input', (e) => {
@@ -1538,6 +1559,11 @@ document.getElementById('btn-options-save').addEventListener('click', () => {
             musicVolume: musicVolume,
             sfxVolume: sfxVolume
         }));
+
+        // Save custom TURN settings
+        localStorage.setItem('smashturbanda_turn_url', document.getElementById('input-turn-url').value.trim());
+        localStorage.setItem('smashturbanda_turn_username', document.getElementById('input-turn-username').value.trim());
+        localStorage.setItem('smashturbanda_turn_credential', document.getElementById('input-turn-credential').value.trim());
     } catch (e) {
         console.warn("Could not save settings locally", e);
     }
