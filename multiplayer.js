@@ -76,30 +76,64 @@ function cleanupPeer() {
 }
 
 // Initialize PeerJS connection
-function initMultiplayer(asHost = true) {
+async function initMultiplayer(asHost = true) {
     cleanupPeer();
 
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
+    // Generate dynamic TURN credentials using the Open Relay secret
+    let iceServers = [
+        {
+            urls: [
+                'stun:stun.l.google.com:19302',
+                'stun:openrelay.metered.ca:80'
+            ]
+        }
+    ];
+
+    try {
+        const secret = 'openrelayprojectsecret';
+        const unixTime = Math.floor(Date.now() / 1000) + 24 * 3600; // 24 hours duration
+        const username = `${unixTime}:smashturbanda`;
+
+        const encoder = new TextEncoder();
+        const keyData = encoder.encode(secret);
+        const messageData = encoder.encode(username);
+
+        const cryptoKey = await window.crypto.subtle.importKey(
+            "raw",
+            keyData,
+            { name: "HMAC", hash: "SHA-1" },
+            false,
+            ["sign"]
+        );
+
+        const signature = await window.crypto.subtle.sign(
+            "HMAC",
+            cryptoKey,
+            messageData
+        );
+
+        const hashArray = Array.from(new Uint8Array(signature));
+        const hashString = String.fromCharCode.apply(null, hashArray);
+        const credential = btoa(hashString);
+
+        iceServers.push({
+            urls: [
+                'turn:staticauth.openrelay.metered.ca:80',
+                'turns:staticauth.openrelay.metered.ca:443?transport=tcp'
+            ],
+            username: username,
+            credential: credential
+        });
+    } catch (e) {
+        console.error("Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
+    }
+
     const tryConnect = (code) => {
         const peerOptions = {
             config: {
-                iceServers: [
-                    {
-                        urls: [
-                            'stun:stun.l.google.com:19302',
-                            'stun:openrelay.metered.ca:80'
-                        ]
-                    },
-                    {
-                        urls: [
-                            'turn:openrelay.metered.ca:80',
-                            'turns:openrelay.metered.ca:443?transport=tcp'
-                        ],
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    }
-                ]
+                iceServers: iceServers
             }
         };
 
