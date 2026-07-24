@@ -127,10 +127,10 @@ async function initMultiplayer(asHost = true) {
             credential: credential
         });
     } catch (e) {
-        console.error("Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
+        console.error("[DEBUG] Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
     }
 
-    console.log("[DEBUG] Configured ICE Servers:", iceServers);
+    console.log("[DEBUG] Configured ICE Servers Details:", JSON.stringify(iceServers, null, 2));
 
     const tryConnect = (code) => {
         const peerOptions = {
