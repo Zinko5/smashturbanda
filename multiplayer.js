@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.07.24';
+const GAME_VERSION = '26.07.06.09';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -205,6 +205,10 @@ async function initMultiplayer(asHost = true) {
 
     const tryConnect = (code) => {
         const peerOptions = {
+            debug: 3,
+            host: '0.peerjs.com',
+            port: 443,
+            secure: true,
             config: {
                 iceServers: iceServers
             }
@@ -347,6 +351,20 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     showToast("Conectando...");
     const targetPeerId = 'smashturbanda-' + code;
     console.log(`[DEBUG] Guest attempting to connect to: ${targetPeerId}`);
+
+    if (!peer || peer.destroyed) {
+        showToast("Error: El cliente P2P no está inicializado. Inténtalo de nuevo.");
+        connectBtn.textContent = "Conectar a Sala";
+        connectBtn.disabled = false;
+        return;
+    }
+    if (!peer.open) {
+        showToast("El cliente P2P aún se está registrando en el servidor de señales. Espera un segundo e inténtalo de nuevo.");
+        connectBtn.textContent = "Conectar a Sala";
+        connectBtn.disabled = false;
+        return;
+    }
+
     connection = peer.connect(targetPeerId);
     if (typeof debugConnection === 'function') debugConnection(connection, "Guest-Side");
     isHost = false;
