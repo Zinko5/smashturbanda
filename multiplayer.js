@@ -82,16 +82,13 @@ async function initMultiplayer(asHost = true) {
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
     // Generate dynamic TURN credentials using the Open Relay secret
+    // Split into individual single-URL objects for maximum PeerJS parser compatibility
     let iceServers = [
-        {
-            urls: [
-                'stun:stun.l.google.com:19302',
-                'stun:stun1.l.google.com:19302',
-                'stun:stun2.l.google.com:19302',
-                'stun:stun3.l.google.com:19302',
-                'stun:stun4.l.google.com:19302'
-            ]
-        }
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
     ];
 
     try {
@@ -122,10 +119,12 @@ async function initMultiplayer(asHost = true) {
         const credential = btoa(hashString);
 
         iceServers.push({
-            urls: [
-                'turn:staticauth.openrelay.metered.ca:80',
-                'turns:staticauth.openrelay.metered.ca:443?transport=tcp'
-            ],
+            urls: 'turn:staticauth.openrelay.metered.ca:80',
+            username: username,
+            credential: credential
+        });
+        iceServers.push({
+            urls: 'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
             username: username,
             credential: credential
         });
@@ -139,10 +138,13 @@ async function initMultiplayer(asHost = true) {
     const customCred = localStorage.getItem('smashturbanda_turn_credential');
     if (customUrl && customUser && customCred) {
         console.log("[DEBUG] Found Custom User TURN Server in localStorage:", customUrl);
-        iceServers.push({
-            urls: customUrl.split(',').map(u => u.trim()),
-            username: customUser,
-            credential: customCred
+        const urlsList = customUrl.split(',').map(u => u.trim());
+        urlsList.forEach(url => {
+            iceServers.push({
+                urls: url,
+                username: customUser,
+                credential: customCred
+            });
         });
     }
 
