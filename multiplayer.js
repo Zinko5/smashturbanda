@@ -344,13 +344,30 @@ let selectedModeLocal = 'stocks';
 let cssReadyLocal = false;
 let cssReadyRemote = false;
 
+// ==================================================
+// Local multiplayer state (2-4 players)
+// ==================================================
+// Each entry: { char, name, gamepadIndex (null=keyboard) }
+let localPlayers = [
+    { char: 'balanceado', name: null, gamepadIndex: null },
+    { char: 'veloz', name: null, gamepadIndex: null }
+];
+// Index of the player currently selecting (0-3)
+let localActivePlayerIndex = 0;
+// CSS gamepad polling interval
+let cssGamepadPollInterval = null;
+
+const PLAYER_COLORS = ['#00ccff', '#ff0055', '#ffcc00', '#00ff00'];
+const PLAYER_COLOR_NAMES = ['Azul', 'Rojo', 'Amarillo', 'Verde'];
+
+
 // Initialize CSS Listeners once on script load
 function initCSSListeners() {
     // Character selection listeners
     document.querySelectorAll('.char-card').forEach(card => {
         card.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            if (gameEngine.mode !== 'vs_online') {
+            if (gameEngine.mode !== 'vs_online' && gameEngine.mode !== 'vs_local') {
                 const char = card.getAttribute('data-char');
                 selectedCharRemote = char;
                 playSynthSound('jump');
@@ -360,7 +377,6 @@ function initCSSListeners() {
 
         card.addEventListener('click', (e) => {
             const char = card.getAttribute('data-char');
-            selectedCharLocal = char;
             playSynthSound('jump');
 
             if (gameEngine.mode === 'vs_online') {
@@ -368,12 +384,19 @@ function initCSSListeners() {
                     isReadyLocal = false;
                     const btn = document.getElementById('btn-css-ready');
                     if (btn) {
-                        btn.textContent = "¡Listo!";
+                        btn.textContent = '¡Listo!';
                         btn.classList.remove('danger');
                         btn.classList.add('primary');
                     }
                 }
                 sendCSSState();
+            } else if (gameEngine.mode === 'vs_local') {
+                // Local: assign to currently active player
+                localPlayers[localActivePlayerIndex].char = char;
+                // Advance to next player if not already last
+                if (localActivePlayerIndex < localPlayers.length - 1) {
+                    localActivePlayerIndex++;
+                }
             } else {
                 if (e.shiftKey) {
                     selectedCharRemote = char;
@@ -412,6 +435,14 @@ function initCSSListeners() {
 
                 selectedNameLocal = (selectedNameLocal === name) ? null : name;
                 sendCSSState();
+            } else if (gameEngine.mode === 'vs_local') {
+                // Local: assign name to active player (toggle off if same name)
+                const ap = localPlayers[localActivePlayerIndex];
+                // Remove this name from other players first
+                localPlayers.forEach((lp, i) => {
+                    if (i !== localActivePlayerIndex && lp.name === name) lp.name = null;
+                });
+                ap.name = (ap.name === name) ? null : name;
             } else {
                 if (e.shiftKey) {
                     if (selectedNameLocal === name) selectedNameLocal = null;
@@ -546,6 +577,7 @@ function initCSSListeners() {
 
 function updateCSSVisuals() {
     const isOnline = (gameEngine.mode === 'vs_online');
+    const isLocal  = (gameEngine.mode === 'vs_local');
     
     const onlineHeader = document.getElementById('css-online-header');
     const teamsCtrl = document.getElementById('css-teams-control-container');
@@ -615,6 +647,24 @@ function updateCSSVisuals() {
             if (readyBtn) readyBtn.style.display = 'block';
             if (startBtn) startBtn.style.display = 'none';
         }
+    } else if (isLocal) {
+        // Local mode: show sidebar with player list, add/remove buttons, active player highlight
+        if (onlineHeader) onlineHeader.style.display = 'none';
+        if (teamsCtrl) teamsCtrl.style.display = 'none';
+        if (playersListCont) playersListCont.style.display = 'flex';
+        if (readyBtn) readyBtn.style.display = 'none';
+        if (startBtn) {
+            startBtn.style.display = 'block';
+            startBtn.disabled = false;
+            startBtn.textContent = '¡Pelear!';
+        }
+
+        // Update sidebar header to say "Jugadores"
+        const sidebarHeader = playersListCont ? playersListCont.querySelector('h3') : null;
+        if (sidebarHeader) sidebarHeader.textContent = 'Jugadores Locales';
+
+        // Render local player slots
+        renderLocalPlayersSidebar();
     } else {
         if (onlineHeader) onlineHeader.style.display = 'none';
         if (teamsCtrl) teamsCtrl.style.display = 'none';
@@ -635,7 +685,7 @@ function updateCSSVisuals() {
         card.className = 'name-card';
     });
 
-    if (gameEngine.mode === 'vs_online') {
+    if (isOnline) {
         lobbyPlayersState.forEach((player, idx) => {
             const card = document.querySelector(`.char-card[data-char="${player.char}"]`);
             if (card) {
@@ -659,6 +709,18 @@ function updateCSSVisuals() {
             });
             if (takenByOther) {
                 nCard.classList.add('disabled');
+            }
+        });
+    } else if (isLocal) {
+        // Mark each player's selections on char/name cards
+        localPlayers.forEach((lp, idx) => {
+            if (lp.char) {
+                const card = document.querySelector(`.char-card[data-char="${lp.char}"]`);
+                if (card) card.classList.add(`selected-p${idx + 1}`);
+            }
+            if (lp.name) {
+                const nCard = document.querySelector(`.name-card[data-name="${lp.name}"]`);
+                if (nCard) nCard.classList.add(`selected-p${idx + 1}`);
             }
         });
     } else {
@@ -689,6 +751,198 @@ function updateCSSVisuals() {
         if (rulesContainer) rulesContainer.classList.remove('hidden');
         if (startBtn) startBtn.classList.remove('hidden');
     }
+}
+
+/**
+ * Renders the local players sidebar with add/remove controls and active player selection.
+ */
+function renderLocalPlayersSidebar() {
+    const playersList = document.getElementById('css-players-list');
+    if (!playersList) return;
+    playersList.replaceChildren();
+
+    // Controls quick ref update in CSS
+    const quickRefEl = document.querySelector('.controls-quick-ref');
+    if (quickRefEl) quickRefEl.style.display = 'none'; // hide in local mode, sidebar replaces it
+
+    localPlayers.forEach((lp, idx) => {
+        const isActive = (idx === localActivePlayerIndex);
+        const pColor = PLAYER_COLORS[idx];
+        const pNum = idx + 1;
+
+        const row = document.createElement('div');
+        row.className = 'player-slot-row local-player-slot' + (isActive ? ' player-selecting' : '');
+        row.style.borderColor = isActive ? pColor : 'rgba(255,255,255,0.05)';
+        row.style.boxShadow = isActive ? `0 0 10px ${pColor}55` : 'none';
+        row.dataset.playerIndex = idx;
+
+        // Left: color dot + P# label + name/char info
+        const left = document.createElement('div');
+        left.className = 'local-slot-left';
+
+        const dot = document.createElement('span');
+        dot.className = 'local-player-dot';
+        dot.style.background = pColor;
+        left.appendChild(dot);
+
+        const info = document.createElement('div');
+        info.className = 'local-slot-info';
+
+        const pLabel = document.createElement('span');
+        pLabel.className = 'local-slot-plabel';
+        pLabel.textContent = `P${pNum}`;
+        pLabel.style.color = pColor;
+        info.appendChild(pLabel);
+
+        const details = document.createElement('span');
+        details.className = 'local-slot-details';
+        const charLabel = lp.char && CHARACTERS[lp.char] ? CHARACTERS[lp.char].name : (lp.char === 'random' ? 'Aleatorio' : 'Sin elegir');
+        const nameLabel = lp.name ? lp.name : '—';
+        details.textContent = `${nameLabel} · ${charLabel}`;
+        info.appendChild(details);
+
+        // Gamepad indicator
+        if (lp.gamepadIndex !== null && lp.gamepadIndex !== undefined) {
+            const gpBadge = document.createElement('span');
+            gpBadge.className = 'gamepad-badge';
+            gpBadge.textContent = `🎮 ${lp.gamepadIndex + 1}`;
+            info.appendChild(gpBadge);
+        }
+
+        left.appendChild(info);
+        row.appendChild(left);
+
+        // Right: Select button (if not active) + Remove button
+        const right = document.createElement('div');
+        right.className = 'local-slot-right';
+
+        if (!isActive) {
+            const selectBtn = document.createElement('button');
+            selectBtn.className = 'local-select-btn';
+            selectBtn.textContent = 'Elegir';
+            selectBtn.title = `Activar selección de P${pNum}`;
+            selectBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                localActivePlayerIndex = idx;
+                updateCSSVisuals();
+            });
+            right.appendChild(selectBtn);
+        } else {
+            const activeLbl = document.createElement('span');
+            activeLbl.className = 'local-active-label';
+            activeLbl.textContent = '▶ Eligiendo';
+            activeLbl.style.color = pColor;
+            right.appendChild(activeLbl);
+        }
+
+        if (idx >= 2) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'local-remove-btn';
+            removeBtn.textContent = '✕';
+            removeBtn.title = `Quitar P${pNum}`;
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                removeLocalPlayer(idx);
+            });
+            right.appendChild(removeBtn);
+        }
+
+        row.appendChild(right);
+        playersList.appendChild(row);
+    });
+
+    // Add player button (if < 4)
+    if (localPlayers.length < 4) {
+        const addRow = document.createElement('div');
+        addRow.className = 'local-add-player-row';
+        addRow.innerHTML = `<button id="btn-add-local-player" class="local-add-btn"><span>+</span> Agregar Jugador</button>`;
+        addRow.querySelector('#btn-add-local-player').addEventListener('click', () => {
+            addLocalPlayer();
+        });
+        playersList.appendChild(addRow);
+    }
+}
+
+function addLocalPlayer() {
+    if (localPlayers.length >= 4) return;
+    const idx = localPlayers.length;
+    localPlayers.push({ char: 'balanceado', name: null, gamepadIndex: null });
+    localActivePlayerIndex = idx; // Switch to new player automatically
+    updateCSSVisuals();
+}
+
+function removeLocalPlayer(idx) {
+    if (localPlayers.length <= 2) return;
+    localPlayers.splice(idx, 1);
+    if (localActivePlayerIndex >= localPlayers.length) {
+        localActivePlayerIndex = localPlayers.length - 1;
+    }
+    updateCSSVisuals();
+}
+
+/**
+ * Gamepad polling loop for CSS: auto-detects which player is pressing a button
+ * and switches the active selecting player.
+ */
+function startCSSGamepadPolling() {
+    stopCSSGamepadPolling();
+    cssGamepadPollInterval = setInterval(() => {
+        if (gameEngine.mode !== 'vs_local') {
+            stopCSSGamepadPolling();
+            return;
+        }
+        if (typeof detectActiveGamepadPlayer !== 'function') return;
+
+        const slot = detectActiveGamepadPlayer();
+        if (slot !== -1 && slot < localPlayers.length && slot !== localActivePlayerIndex) {
+            localActivePlayerIndex = slot;
+            updateCSSVisuals();
+        }
+        if (typeof updateGamepadPrevStates === 'function') updateGamepadPrevStates();
+    }, 100);
+}
+
+function stopCSSGamepadPolling() {
+    if (cssGamepadPollInterval) {
+        clearInterval(cssGamepadPollInterval);
+        cssGamepadPollInterval = null;
+    }
+}
+
+// Called by input.js on gamepad events
+function onGamepadConnected(gp) {
+    // Auto-bind to the next unbound player slot if possible
+    const alreadyBound = gamepadBindings.indexOf(gp.index) !== -1;
+    if (!alreadyBound) {
+        // Find first unbound slot
+        for (let i = 0; i < 4; i++) {
+            if (gamepadBindings[i] === null) {
+                gamepadBindings[i] = gp.index;
+                if (gameEngine.mode === 'vs_local' && i < localPlayers.length) {
+                    localPlayers[i].gamepadIndex = gp.index;
+                }
+                showToast(`🎮 Mando ${gp.index + 1} vinculado a P${i + 1}`);
+                // Refresh options panel if open
+                if (!document.getElementById('menu-options').classList.contains('hidden')) {
+                    renderOptionsKeys();
+                }
+                updateCSSVisuals();
+                break;
+            }
+        }
+    }
+}
+
+function onGamepadDisconnected(gp) {
+    showToast(`🎮 Mando ${gp.index + 1} desconectado`);
+    // Update localPlayers to remove gamepad ref
+    localPlayers.forEach(lp => {
+        if (lp.gamepadIndex === gp.index) lp.gamepadIndex = null;
+    });
+    if (!document.getElementById('menu-options').classList.contains('hidden')) {
+        renderOptionsKeys();
+    }
+    updateCSSVisuals();
 }
 
 function sendCSSState() {
@@ -996,26 +1250,38 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
         });
     } else {
         // Local game startup configuration
-        let p1 = selectedCharLocal;
-        if (p1 === 'random') p1 = getRandomChar();
-        let p2 = selectedCharRemote || 'veloz';
-        if (p2 === 'random') p2 = getRandomChar();
-        const mode = gameEngine.mode; // local vs, cpu, training
+        const mode = gameEngine.mode; // vs_local, vs_cpu, training
         const rule = document.getElementById('game-mode-select').value;
         const diff = document.getElementById('cpu-diff-select').value;
+        const stocksLimitVal2 = parseInt(document.getElementById('game-stocks-select').value) || 3;
+        const timeLimitVal2 = parseInt(document.getElementById('game-time-select').value) || 2;
 
         let playersConfig = [];
         if (mode === 'vs_local') {
-            playersConfig = [
-                { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1, team: 1 },
-                { id: 'p2', name: selectedNameRemote || 'Jugador 2', char: p2, team: teamsEnabledLocal ? 2 : null }
-            ];
+            playersConfig = localPlayers.map((lp, idx) => {
+                let char = lp.char || 'balanceado';
+                if (char === 'random') char = getRandomChar();
+                return {
+                    id: `p${idx + 1}`,
+                    name: lp.name || `Jugador ${idx + 1}`,
+                    char: char,
+                    team: teamsEnabledLocal ? (idx + 1) : null
+                };
+            });
         } else if (mode === 'vs_cpu') {
+            let p1 = selectedCharLocal;
+            if (p1 === 'random') p1 = getRandomChar();
+            let p2 = selectedCharRemote || 'veloz';
+            if (p2 === 'random') p2 = getRandomChar();
             playersConfig = [
                 { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1, team: 1 },
                 { id: 'p2', name: selectedNameRemote || `CPU (${diff.toUpperCase()})`, char: p2, team: teamsEnabledLocal ? 2 : null }
             ];
         } else {
+            let p1 = selectedCharLocal;
+            if (p1 === 'random') p1 = getRandomChar();
+            let p2 = selectedCharRemote || 'veloz';
+            if (p2 === 'random') p2 = getRandomChar();
             playersConfig = [
                 { id: 'p1', name: selectedNameLocal || 'Jugador 1', char: p1, team: 1 },
                 { id: 'p2', name: selectedNameRemote || 'CPU Dummy', char: p2, team: teamsEnabledLocal ? 2 : null }
@@ -1023,8 +1289,8 @@ document.getElementById('btn-css-start').addEventListener('click', () => {
         }
 
         cachedPlayersConfig = playersConfig;
-        cachedStocksLimit = stocksLimitVal;
-        cachedTimeLimit = timeLimitVal;
+        cachedStocksLimit = stocksLimitVal2;
+        cachedTimeLimit = timeLimitVal2;
         cachedTeamsEnabled = teamsEnabledLocal;
         cachedGameMode = mode;
     }
@@ -1481,11 +1747,18 @@ function unpackPlayerState(p, stateArray) {
 // Menu Navigations
 document.getElementById('btn-vs-local').addEventListener('click', () => {
     gameEngine.mode = 'vs_local';
-    document.getElementById('css-title').textContent = "Selección de Personaje (Local VS)";
+    document.getElementById('css-title').textContent = 'Selección de Personaje (Local VS)';
     document.getElementById('cpu-diff-label').style.display = 'none';
-    document.getElementById('p2-ref-container').style.display = 'block';
+    document.getElementById('p2-ref-container').style.display = 'none'; // sidebar replaces quick ref
     document.getElementById('menu-main').classList.add('hidden');
     document.getElementById('menu-css').classList.remove('hidden');
+    // Reset local players state
+    localPlayers = [
+        { char: 'balanceado', name: null, gamepadIndex: gamepadBindings[0] },
+        { char: 'veloz', name: null, gamepadIndex: gamepadBindings[1] }
+    ];
+    localActivePlayerIndex = 0;
+    startCSSGamepadPolling();
     if (typeof playMenuMusic === 'function') playMenuMusic();
     updateCSSVisuals();
 });
@@ -1530,6 +1803,7 @@ document.getElementById('btn-vs-online').addEventListener('click', () => {
 document.getElementById('btn-css-back').addEventListener('click', () => {
     document.getElementById('menu-css').classList.add('hidden');
     document.getElementById('menu-main').classList.remove('hidden');
+    stopCSSGamepadPolling();
     if (gameEngine.mode === 'vs_online') {
         cleanupPeer();
     }
@@ -1571,6 +1845,7 @@ document.getElementById('btn-options-save').addEventListener('click', () => {
     try {
         localStorage.setItem('smashturbanda_settings', JSON.stringify({
             controls: controls,
+            gamepadBindings: gamepadBindings,
             masterVolume: masterVolume,
             musicVolume: musicVolume,
             sfxVolume: sfxVolume
@@ -1681,64 +1956,122 @@ window.addEventListener('keydown', (e) => {
 
 // Render custom keyboard settings grid
 function renderOptionsKeys() {
-    const p1Container = document.getElementById('p1-controls-list');
-    p1Container.replaceChildren();
+    const PLAYER_LABELS = ['Jugador 1', 'Jugador 2', 'Jugador 3', 'Jugador 4'];
+    const PLAYER_IDS = ['p1', 'p2', 'p3', 'p4'];
+    const CONTAINER_IDS = ['p1-controls-list', 'p2-controls-list', 'p3-controls-list', 'p4-controls-list'];
+    const ACTION_LABELS = {
+        left: 'Izquierda',
+        right: 'Derecha',
+        up: 'Arriba',
+        down: 'Abajo',
+        jump: 'Saltar',
+        attackA: 'Ataque A',
+        attackB: 'Especial B',
+        shield: 'Escudo',
+        grab: 'Agarrar / Objeto'
+    };
 
-    Object.keys(controls.p1).forEach(key => {
-        const row = document.createElement('div');
-        row.className = 'key-row';
+    PLAYER_IDS.forEach((pId, playerIdx) => {
+        const container = document.getElementById(CONTAINER_IDS[playerIdx]);
+        if (!container) return;
+        container.replaceChildren();
 
-        const label = document.createElement('span');
-        label.textContent = key.toUpperCase();
+        // Gamepad binding row
+        const gpRow = document.createElement('div');
+        gpRow.className = 'key-row gamepad-binding-row';
+        const gpLabel = document.createElement('span');
+        gpLabel.textContent = '🎮 Mando vinculado';
+        const gpValue = document.createElement('span');
+        gpValue.className = 'key-value gamepad-bind-value';
+        const boundGp = gamepadBindings[playerIdx];
+        if (boundGp !== null && boundGp !== undefined) {
+            const gamepads = typeof getConnectedGamepads === 'function' ? getConnectedGamepads() : [];
+            const gp = gamepads[boundGp];
+            gpValue.textContent = gp ? `Mando ${boundGp + 1}: ${gp.id.substring(0, 20)}...` : `Mando ${boundGp + 1} (desconectado)`;
+            gpValue.style.color = '#10b981';
+        } else {
+            gpValue.textContent = 'Sin mando (teclado)';
+            gpValue.style.color = '#94a3b8';
+        }
 
-        const valueBox = document.createElement('span');
-        valueBox.className = 'key-value';
-        valueBox.textContent = controls.p1[key];
-
-        valueBox.addEventListener('click', () => {
-            valueBox.textContent = 'Presiona una tecla...';
-            const listenKey = (ev) => {
-                controls.p1[key] = ev.code;
-                valueBox.textContent = ev.code;
-                updateControlsQuickRef();
-                window.removeEventListener('keydown', listenKey);
-            };
-            window.addEventListener('keydown', listenKey);
+        // Click to rebind: wait for any button on any gamepad
+        gpValue.addEventListener('click', () => {
+            gpValue.textContent = 'Presiona cualquier botón del mando...';
+            gpValue.style.color = '#ffcc00';
+            const pollBind = setInterval(() => {
+                const gamepads = typeof getConnectedGamepads === 'function' ? getConnectedGamepads() : [];
+                for (let gi = 0; gi < gamepads.length; gi++) {
+                    const g = gamepads[gi];
+                    if (!g || !g.connected) continue;
+                    for (let bi = 0; bi < g.buttons.length; bi++) {
+                        if (g.buttons[bi].pressed) {
+                            clearInterval(pollBind);
+                            gamepadBindings[playerIdx] = gi;
+                            if (localPlayers[playerIdx]) localPlayers[playerIdx].gamepadIndex = gi;
+                            renderOptionsKeys();
+                            return;
+                        }
+                    }
+                }
+            }, 100);
+            // Timeout after 10s
+            setTimeout(() => {
+                clearInterval(pollBind);
+                renderOptionsKeys();
+            }, 10000);
         });
 
-        row.appendChild(label);
-        row.appendChild(valueBox);
-        p1Container.appendChild(row);
-    });
-
-    const p2Container = document.getElementById('p2-controls-list');
-    p2Container.replaceChildren();
-
-    Object.keys(controls.p2).forEach(key => {
-        const row = document.createElement('div');
-        row.className = 'key-row';
-
-        const label = document.createElement('span');
-        label.textContent = key.toUpperCase();
-
-        const valueBox = document.createElement('span');
-        valueBox.className = 'key-value';
-        valueBox.textContent = controls.p2[key];
-
-        valueBox.addEventListener('click', () => {
-            valueBox.textContent = 'Presiona una tecla...';
-            const listenKey = (ev) => {
-                controls.p2[key] = ev.code;
-                valueBox.textContent = ev.code;
-                updateControlsQuickRef();
-                window.removeEventListener('keydown', listenKey);
-            };
-            window.addEventListener('keydown', listenKey);
+        // Unbind button
+        const unbindBtn = document.createElement('button');
+        unbindBtn.className = 'local-remove-btn';
+        unbindBtn.title = 'Desvincular mando';
+        unbindBtn.textContent = '✕';
+        unbindBtn.style.marginLeft = '6px';
+        unbindBtn.addEventListener('click', () => {
+            gamepadBindings[playerIdx] = null;
+            if (localPlayers[playerIdx]) localPlayers[playerIdx].gamepadIndex = null;
+            renderOptionsKeys();
         });
 
-        row.appendChild(label);
-        row.appendChild(valueBox);
-        p2Container.appendChild(row);
+        const gpRight = document.createElement('div');
+        gpRight.style.display = 'flex';
+        gpRight.style.alignItems = 'center';
+        gpRight.style.gap = '6px';
+        gpRight.appendChild(gpValue);
+        gpRight.appendChild(unbindBtn);
+
+        gpRow.appendChild(gpLabel);
+        gpRow.appendChild(gpRight);
+        container.appendChild(gpRow);
+
+        // Keyboard key rows
+        Object.keys(controls[pId]).forEach(key => {
+            const row = document.createElement('div');
+            row.className = 'key-row';
+
+            const label = document.createElement('span');
+            label.textContent = ACTION_LABELS[key] || key.toUpperCase();
+
+            const valueBox = document.createElement('span');
+            valueBox.className = 'key-value';
+            valueBox.textContent = controls[pId][key];
+
+            valueBox.addEventListener('click', () => {
+                valueBox.textContent = 'Presiona una tecla...';
+                const listenKey = (ev) => {
+                    ev.preventDefault();
+                    controls[pId][key] = ev.code;
+                    valueBox.textContent = ev.code;
+                    updateControlsQuickRef();
+                    window.removeEventListener('keydown', listenKey);
+                };
+                window.addEventListener('keydown', listenKey);
+            });
+
+            row.appendChild(label);
+            row.appendChild(valueBox);
+            container.appendChild(row);
+        });
     });
 }
 
@@ -1823,13 +2156,15 @@ function initVolumeControl() {
 
 function updateControlsQuickRef() {
     // Format keys for display
-    const cleanKey = (k) => k.replace('Key', '').replace('Arrow', '←/→/↑/↓ ');
+    const cleanKey = (k) => k ? k.replace('Key', '').replace('Arrow', '←/→/↑/↓ ').replace('Numpad', 'N') : '?';
 
     const p1KeysText = `${cleanKey(controls.p1.left)}/${cleanKey(controls.p1.right)} (Mover) | ${cleanKey(controls.p1.jump)} (Saltar) | ${cleanKey(controls.p1.attackA)} (Ataque A) | ${cleanKey(controls.p1.attackB)} (Especial B) | ${cleanKey(controls.p1.shield)} (Escudo)`;
     const p2KeysText = `${cleanKey(controls.p2.left)}/${cleanKey(controls.p2.right)} (Mover) | ${cleanKey(controls.p2.jump)} (Saltar) | ${cleanKey(controls.p2.attackA)} (Ataque A) | ${cleanKey(controls.p2.attackB)} (Especial B) | ${cleanKey(controls.p2.shield)} (Escudo)`;
 
-    document.getElementById('p1-ref-keys').textContent = p1KeysText;
-    document.getElementById('p2-ref-keys').textContent = p2KeysText;
+    const p1El = document.getElementById('p1-ref-keys');
+    const p2El = document.getElementById('p2-ref-keys');
+    if (p1El) p1El.textContent = p1KeysText;
+    if (p2El) p2El.textContent = p2KeysText;
 }
 
 function initLobbyUI() {

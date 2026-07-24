@@ -39,6 +39,8 @@ Los afiches se generan indicando lo más significativo de cada microparche, no s
 
 ## Flujo de Trabajo en Git
 
+_Nota Importante: Si eres una IA, no ejecutes ningún comando de git, esas son indicaciones para humanos_
+
 Para mantener la integridad del proyecto y distinguir los avances internos de los lanzamientos públicos, se utilizarán **commits continuos** acompañados de **Git Tags**:
 
 ### 1. Desarrollo de miniparches (`dd`)

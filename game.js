@@ -943,9 +943,20 @@ class SmashGame {
         const ctrlText = document.getElementById('game-controls-text');
         if (ctrlOverlay && ctrlText) {
             ctrlOverlay.classList.remove('hidden');
-            const cleanKey = (k) => k.replace('Key', '').replace('Arrow', '←/→/↑/↓ ');
+            const cleanKey = (k) => k ? k.replace('Key', '').replace('Arrow', '←/→/↑/↓ ').replace('Numpad', 'N') : '?';
+            const gpLabel = (slot) => {
+                if (typeof gamepadBindings !== 'undefined' && gamepadBindings[slot] !== null) {
+                    return ` [🎮${gamepadBindings[slot] + 1}]`;
+                }
+                return '';
+            };
             if (mode === 'vs_local') {
-                ctrlText.textContent = `P1: ${cleanKey(controls.p1.left)}/${cleanKey(controls.p1.right)} (Mov) | ${cleanKey(controls.p1.jump)} (Saltar) | ${cleanKey(controls.p1.grab)} (Objeto)  ||  P2: ${cleanKey(controls.p2.left)}/${cleanKey(controls.p2.right)} (Mov) | ${cleanKey(controls.p2.jump)} (Saltar) | ${cleanKey(controls.p2.grab)} (Objeto)`;
+                const parts = this.players.map((p, i) => {
+                    const pKey = p.id; // 'p1', 'p2', 'p3', 'p4'
+                    const ctrl = controls[pKey] || controls.p1;
+                    return `${p.name}${gpLabel(i)}: ${cleanKey(ctrl.left)}/${cleanKey(ctrl.right)} Mov | ${cleanKey(ctrl.jump)} Saltar | ${cleanKey(ctrl.grab)} Obj`;
+                });
+                ctrlText.textContent = parts.join('  ·  ');
             } else if (mode === 'vs_online') {
                 ctrlText.textContent = `Tus Controles: ${cleanKey(controls.p1.left)}/${cleanKey(controls.p1.right)} (Mover) | ${cleanKey(controls.p1.jump)} (Saltar) | ${cleanKey(controls.p1.attackA)} (Ataque A) | ${cleanKey(controls.p1.attackB)} (Especial B) | ${cleanKey(controls.p1.shield)} (Escudo) | ${cleanKey(controls.p1.grab)} (Objeto)`;
             } else {
@@ -1739,16 +1750,14 @@ class SmashGame {
             }
         } else {
             // Local VS / CPU / Training
-            if (p.id === 'p1') {
+            // In vs_local, all player IDs (p1..p4) get real human inputs.
+            // In vs_cpu / training, only p1 is human; rest are CPU.
+            const localPlayerIds = ['p1', 'p2', 'p3', 'p4'];
+            if (this.mode === 'vs_local' && localPlayerIds.includes(p.id)) {
+                keys = this.getPlayerInputs(p.id);
+            } else if (p.id === 'p1') {
                 keys = this.getPlayerInputs('p1');
-            } else if (p.id === 'p2') {
-                if (this.mode === 'vs_local') {
-                    keys = this.getPlayerInputs('p2');
-                } else {
-                    keys = this.getCPUInputs(p);
-                }
             } else {
-                // Players 3 and 4 are CPU in local mode
                 keys = this.getCPUInputs(p);
             }
         }
@@ -2499,6 +2508,13 @@ class SmashGame {
     }
 
     getPlayerInputs(pId) {
+        // Map player ID to 0-indexed slot for the new combined input system
+        const slotMap = { p1: 0, p2: 1, p3: 2, p4: 3 };
+        const slot = slotMap[pId];
+        if (slot !== undefined && typeof getPlayerInputState === 'function') {
+            return getPlayerInputState(slot);
+        }
+        // Fallback: keyboard only (legacy path)
         const layout = controls[pId] || controls.p1;
         return {
             left: keysPressed[layout.left] || false,
