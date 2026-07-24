@@ -95,7 +95,7 @@ async function initMultiplayer(asHost = true) {
     try {
         const secret = 'openrelayprojectsecret';
         const unixTime = Math.floor(Date.now() / 1000) + 24 * 3600; // 24 hours duration
-        const username = `${unixTime}:smashturbanda`;
+        const username = `${unixTime}:openrelayproject`;
 
         const encoder = new TextEncoder();
         const keyData = encoder.encode(secret);
@@ -152,6 +152,38 @@ async function initMultiplayer(asHost = true) {
     } catch (e) {
         console.error("[DEBUG] Failed to generate dynamic TURN credentials, falling back to STUN only:", e);
     }
+
+    // Add static fallback credentials for Open Relay
+    iceServers.push({
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    });
+    iceServers.push({
+        urls: 'turn:openrelay.metered.ca:80?transport=udp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    });
+    iceServers.push({
+        urls: 'turn:openrelay.metered.ca:80?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    });
+    iceServers.push({
+        urls: 'turns:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    });
+    iceServers.push({
+        urls: 'turns:openrelay.metered.ca:443?transport=udp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    });
+    iceServers.push({
+        urls: 'turns:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+    });
 
     // Add custom user-configured TURN server if present
     const customUrl = localStorage.getItem('smashturbanda_turn_url');
