@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.07.06.10';
+const GAME_VERSION = '26.07.06.11';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -85,11 +85,15 @@ async function initMultiplayer(asHost = true) {
     // Generate dynamic TURN credentials using the Open Relay secret
     // Split into individual single-URL objects for maximum PeerJS parser compatibility
     let iceServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' }
+        {
+            urls: [
+                'stun:stun.l.google.com:19302',
+                'stun:stun1.l.google.com:19302',
+                'stun:stun2.l.google.com:19302',
+                'stun:stun3.l.google.com:19302',
+                'stun:stun4.l.google.com:19302'
+            ]
+        }
     ];
 
     try {
@@ -120,32 +124,14 @@ async function initMultiplayer(asHost = true) {
         const credential = btoa(hashString);
 
         iceServers.push({
-            urls: 'turn:staticauth.openrelay.metered.ca:80',
-            username: username,
-            credential: credential
-        });
-        iceServers.push({
-            urls: 'turn:staticauth.openrelay.metered.ca:80?transport=udp',
-            username: username,
-            credential: credential
-        });
-        iceServers.push({
-            urls: 'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
-            username: username,
-            credential: credential
-        });
-        iceServers.push({
-            urls: 'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
-            username: username,
-            credential: credential
-        });
-        iceServers.push({
-            urls: 'turns:staticauth.openrelay.metered.ca:443?transport=udp',
-            username: username,
-            credential: credential
-        });
-        iceServers.push({
-            urls: 'turns:staticauth.openrelay.metered.ca:443',
+            urls: [
+                'turn:staticauth.openrelay.metered.ca:80',
+                'turn:staticauth.openrelay.metered.ca:80?transport=udp',
+                'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
+                'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
+                'turns:staticauth.openrelay.metered.ca:443?transport=udp',
+                'turns:staticauth.openrelay.metered.ca:443'
+            ],
             username: username,
             credential: credential
         });
@@ -155,32 +141,14 @@ async function initMultiplayer(asHost = true) {
 
     // Add static fallback credentials for Open Relay
     iceServers.push({
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    });
-    iceServers.push({
-        urls: 'turn:openrelay.metered.ca:80?transport=udp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    });
-    iceServers.push({
-        urls: 'turn:openrelay.metered.ca:80?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    });
-    iceServers.push({
-        urls: 'turns:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    });
-    iceServers.push({
-        urls: 'turns:openrelay.metered.ca:443?transport=udp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    });
-    iceServers.push({
-        urls: 'turns:openrelay.metered.ca:443',
+        urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:80?transport=udp',
+            'turn:openrelay.metered.ca:80?transport=tcp',
+            'turns:openrelay.metered.ca:443?transport=tcp',
+            'turns:openrelay.metered.ca:443?transport=udp',
+            'turns:openrelay.metered.ca:443'
+        ],
         username: 'openrelayproject',
         credential: 'openrelayproject'
     });
@@ -192,12 +160,10 @@ async function initMultiplayer(asHost = true) {
     if (customUrl && customUser && customCred) {
         console.log("[DEBUG] Found Custom User TURN Server in localStorage:", customUrl);
         const urlsList = customUrl.split(',').map(u => u.trim());
-        urlsList.forEach(url => {
-            iceServers.push({
-                urls: url,
-                username: customUser,
-                credential: customCred
-            });
+        iceServers.push({
+            urls: urlsList,
+            username: customUser,
+            credential: customCred
         });
     }
 
