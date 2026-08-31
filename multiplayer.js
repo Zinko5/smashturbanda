@@ -1,4 +1,7 @@
-const GAME_VERSION = '26.08.01.02';
+const GAME_VERSION = '26.08.01.03';
+// TODO: Reemplaza esto con la URL de tu Cloudflare Worker (ej. 'https://smashturbanda-turn.tu-usuario.workers.dev')
+const TURN_BACKEND_URL = 'https://smashturbanda-turn.gabriel-marcelo-munoz.workers.dev/';
+
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -28,7 +31,7 @@ function getRandomChar() {
 
 const originalPlaySoundFile = (typeof playSoundFile === 'function') ? playSoundFile : null;
 if (originalPlaySoundFile) {
-    playSoundFile = function(filePath, durationMs = null) {
+    playSoundFile = function (filePath, durationMs = null) {
         originalPlaySoundFile(filePath, durationMs);
         if (gameEngine && gameEngine.mode === 'vs_online' && isHost) {
             if (filePath.includes('fernan-embestida')) {
@@ -40,19 +43,19 @@ if (originalPlaySoundFile) {
 
 function cleanupPeer() {
     if (connection) {
-        try { connection.close(); } catch(e){}
+        try { connection.close(); } catch (e) { }
         connection = null;
     }
     if (connections && connections.length > 0) {
         connections.forEach(conn => {
             if (conn) {
-                try { conn.close(); } catch(e){}
+                try { conn.close(); } catch (e) { }
             }
         });
         connections = [];
     }
     if (peer) {
-        try { peer.destroy(); } catch(e){}
+        try { peer.destroy(); } catch (e) { }
         peer = null;
     }
     isHost = false;
@@ -89,11 +92,10 @@ async function initMultiplayer(asHost = true) {
         { urls: 'stun:stun2.l.google.com:19302' }
     ];
 
-    // Try to fetch dynamic TURN credentials from Metered.ca API if configured
-    const meteredApiKey = localStorage.getItem('smashturbanda_metered_api_key');
-    if (meteredApiKey) {
+    // Try to fetch dynamic TURN credentials from your secure Cloudflare Worker backend
+    if (TURN_BACKEND_URL) {
         try {
-            const resp = await fetch(`https://smashturbanda.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`);
+            const resp = await fetch(TURN_BACKEND_URL);
             if (resp.ok) {
                 const meteredServers = await resp.json();
                 iceServers = iceServers.concat(meteredServers);
@@ -106,19 +108,9 @@ async function initMultiplayer(asHost = true) {
         }
     }
 
-    // Default TURN relay servers (Open Relay Project by Metered.ca - free 20GB/month).
-    // Each URL is a separate ICE server object for PeerJS 1.4.7 parser compatibility.
-    // These provide relay fallback when direct P2P fails (symmetric NAT, CGNAT, mobile data).
-    const hasMeteredDynamic = meteredApiKey && iceServers.some(s => s.username && String(s.urls || '').includes('metered'));
-    if (!hasMeteredDynamic) {
-        iceServers.push(
-            { urls: 'stun:openrelay.metered.ca:80' },
-            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-            { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-        );
-        console.log('[DEBUG] Using Open Relay (metered.ca) default TURN servers.');
+    // If no dynamic TURN is configured, we only have STUN. 
+    if (!TURN_BACKEND_URL && !customUrl) {
+        console.warn('[DEBUG] No TURN server configured. P2P connection may fail on mobile networks or strict NATs. Developer needs to set TURN_BACKEND_URL.');
     }
 
     // Add custom user-configured TURN server if present (overrides/supplements the above)
@@ -602,8 +594,8 @@ function initCSSListeners() {
 
 function updateCSSVisuals() {
     const isOnline = (gameEngine.mode === 'vs_online');
-    const isLocal  = (gameEngine.mode === 'vs_local');
-    
+    const isLocal = (gameEngine.mode === 'vs_local');
+
     const onlineHeader = document.getElementById('css-online-header');
     const teamsCtrl = document.getElementById('css-teams-control-container');
     const playersListCont = document.getElementById('css-players-list-container');
@@ -616,7 +608,7 @@ function updateCSSVisuals() {
         if (teamsCtrl) teamsCtrl.style.display = teamsEnabledLocal ? 'flex' : 'none';
         if (playersListCont) playersListCont.style.display = 'flex';
         if (roomCodeVal) roomCodeVal.textContent = roomCode || '----';
-        
+
         // Render players list dynamically
         const playersList = document.getElementById('css-players-list');
         if (playersList) {
@@ -624,17 +616,17 @@ function updateCSSVisuals() {
             lobbyPlayersState.forEach((player, idx) => {
                 const row = document.createElement('div');
                 row.className = 'player-slot-row';
-                
+
                 const left = document.createElement('div');
                 left.style.display = 'flex';
                 left.style.gap = '10px';
                 left.style.alignItems = 'center';
-                
+
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'player-slot-name';
                 nameSpan.textContent = player.name;
                 left.appendChild(nameSpan);
-                
+
                 const charSpan = document.createElement('span');
                 charSpan.className = 'player-slot-char';
                 const charName = player.char === 'random' ? 'Aleatorio' : CHARACTERS[player.char].name;
@@ -647,18 +639,18 @@ function updateCSSVisuals() {
                     teamSpan.textContent = player.team;
                     left.appendChild(teamSpan);
                 }
-                
+
                 row.appendChild(left);
-                
+
                 const statusSpan = document.createElement('span');
                 statusSpan.className = `status-badge ${player.ready ? 'status-ready' : 'status-not-ready'}`;
                 statusSpan.textContent = player.ready ? 'Listo' : 'No Listo';
                 row.appendChild(statusSpan);
-                
+
                 playersList.appendChild(row);
             });
         }
-        
+
         // Disable pelear button if someone is not ready (excluding host)
         const allGuestsReady = lobbyPlayersState.slice(1).every(p => p.ready);
         if (isHost) {
@@ -1066,7 +1058,7 @@ function handleReceivedData(data, senderConn) {
             // Delay close so the toast is visible and the mismatch message is sent
             setTimeout(() => {
                 if (senderConn) {
-                    try { senderConn.close(); } catch(e){}
+                    try { senderConn.close(); } catch (e) { }
                 }
                 // Force hard reload to bust browser cache
                 window.location.reload(true);
@@ -1132,7 +1124,7 @@ function handleReceivedData(data, senderConn) {
         cachedTeamsEnabled = data.teamsEnabled;
         cachedGameMode = 'vs_online';
         selectedModeLocal = data.mode;
-        
+
         document.getElementById('menu-css').classList.add('hidden');
         document.getElementById('menu-stage-select').classList.remove('hidden');
         startStageSelectionCountdown();
@@ -1513,7 +1505,7 @@ function overrideGameLoopForP2P() {
         } else {
             // Guest collects inputs and sends them to Host only if they changed (reduces upload lag/traffic by up to 90%)
             const inputs = gameEngine.getPlayerInputs('p1');
-            const inputsChanged = !lastSentInputs || 
+            const inputsChanged = !lastSentInputs ||
                 inputs.left !== lastSentInputs.left ||
                 inputs.right !== lastSentInputs.right ||
                 inputs.up !== lastSentInputs.up ||
@@ -1849,7 +1841,6 @@ document.getElementById('btn-options-menu').addEventListener('click', () => {
     renderOptionsKeys();
 
     // Populate TURN settings
-    document.getElementById('input-metered-api-key').value = localStorage.getItem('smashturbanda_metered_api_key') || '';
     document.getElementById('input-turn-url').value = localStorage.getItem('smashturbanda_turn_url') || '';
     document.getElementById('input-turn-username').value = localStorage.getItem('smashturbanda_turn_username') || '';
     document.getElementById('input-turn-credential').value = localStorage.getItem('smashturbanda_turn_credential') || '';
@@ -1879,7 +1870,6 @@ document.getElementById('btn-options-save').addEventListener('click', () => {
         }));
 
         // Save TURN settings
-        localStorage.setItem('smashturbanda_metered_api_key', document.getElementById('input-metered-api-key').value.trim());
         localStorage.setItem('smashturbanda_turn_url', document.getElementById('input-turn-url').value.trim());
         localStorage.setItem('smashturbanda_turn_username', document.getElementById('input-turn-username').value.trim());
         localStorage.setItem('smashturbanda_turn_credential', document.getElementById('input-turn-credential').value.trim());
@@ -1944,7 +1934,7 @@ document.getElementById('btn-pause-lobby').addEventListener('click', () => {
     } else {
         isReadyLocal = false;
         selectedStageLocal = null;
-        
+
         const btn = document.getElementById('btn-css-ready');
         if (btn) {
             btn.textContent = "¡Listo!";
@@ -2149,7 +2139,7 @@ function initVolumeControl() {
                     musicVolume: musicVolume,
                     sfxVolume: sfxVolume
                 }));
-            } catch (err) {}
+            } catch (err) { }
         });
     }
 
@@ -2176,7 +2166,7 @@ function initVolumeControl() {
                     musicVolume: musicVolume,
                     sfxVolume: sfxVolume
                 }));
-            } catch (err) {}
+            } catch (err) { }
         });
     }
     updateVolumeUI();
@@ -2255,7 +2245,7 @@ if (document.readyState === 'loading') {
 // ==========================================
 function debugConnection(conn, label) {
     console.log(`%c[DEBUG - ${label}] Connection Object:`, 'color: #38bdf8; font-weight: bold;', conn);
-    
+
     conn.on('open', () => {
         console.log(`%c[DEBUG - ${label}] Connection OPEN event fired. Peer ID: ${conn.peer}`, 'color: #4ade80; font-weight: bold;');
         if (conn.peerConnection) {
@@ -2264,15 +2254,15 @@ function debugConnection(conn, label) {
             console.warn(`[DEBUG - ${label}] No peerConnection object available on open.`);
         }
     });
-    
+
     conn.on('data', (data) => {
         console.log(`[DEBUG - ${label}] Data packet received of type: ${data.type || typeof data}`);
     });
-    
+
     conn.on('close', () => {
         console.log(`%c[DEBUG - ${label}] Connection CLOSE event fired.`, 'color: #f87171; font-weight: bold;');
     });
-    
+
     conn.on('error', (err) => {
         console.error(`%c[DEBUG - ${label}] Connection ERROR event:`, 'color: #ef4444; font-weight: bold;', err);
     });
@@ -2289,11 +2279,11 @@ function debugConnection(conn, label) {
 function monitorRTCPeerConnection(pc, label) {
     console.log(`%c[DEBUG - ${label}] Monitoring RTCPeerConnection:`, 'color: #a855f7;', pc);
     console.log(`[DEBUG - ${label}] Initial States -> Connection: ${pc.connectionState}, ICE: ${pc.iceConnectionState}, Gathering: ${pc.iceGatheringState}`);
-    
+
     pc.onconnectionstatechange = () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ConnectionState: ${pc.connectionState}`);
     };
-    
+
     pc.oniceconnectionstatechange = () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ICEConnectionState: ${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'failed') {
@@ -2307,11 +2297,11 @@ function monitorRTCPeerConnection(pc, label) {
             }
         }
     };
-    
+
     pc.onicegatheringstatechange = () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ICEGatheringState: ${pc.iceGatheringState}`);
     };
-    
+
     pc.onsignalingstatechange = () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection SignalingState: ${pc.signalingState}`);
     };
