@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.08.01.04';
+const GAME_VERSION = '26.08.01.05';
 // TODO: Reemplaza esto con la URL de tu Cloudflare Worker (ej. 'https://smashturbanda-turn.tu-usuario.workers.dev')
 const TURN_BACKEND_URL = 'https://smashturbanda-turn.gabriel-marcelo-munoz.workers.dev/';
 
@@ -99,12 +99,38 @@ async function initMultiplayer(asHost = true) {
             if (resp.ok) {
                 const meteredServers = await resp.json();
                 if (Array.isArray(meteredServers)) {
-                    iceServers = iceServers.concat(meteredServers);
-                    console.log('[DEBUG] Fetched Metered.ca dynamic TURN credentials:', meteredServers.length, 'servers');
+                    // Agrupar todas las URLs de TURN bajo el mismo username/credential
+                    // y añadir el puerto 3478 estándar para evadir bloqueos de ISP en móviles.
+                    let turnUrls = [];
+                    let username = '';
+                    let credential = '';
+                    
+                    meteredServers.forEach(server => {
+                        if (server.urls && typeof server.urls === 'string' && server.urls.startsWith('turn')) {
+                            turnUrls.push(server.urls);
+                            if (server.urls.includes(':80')) {
+                                turnUrls.push(server.urls.replace(':80', ':3478')); // Añadir puerto estándar
+                            }
+                            username = server.username || username;
+                            credential = server.credential || credential;
+                        } else if (server.urls) {
+                            // Añadir STUNs extra que vengan de Metered
+                            iceServers.push(server);
+                        }
+                    });
+
+                    if (turnUrls.length > 0) {
+                        iceServers.push({
+                            urls: turnUrls,
+                            username: username,
+                            credential: credential
+                        });
+                        console.log('[DEBUG] Fetched Metered.ca dynamic TURN credentials and bundled URLs:', turnUrls);
+                    }
                 } else if (meteredServers.error) {
                     console.error('[DEBUG] Metered.ca API returned an error JSON:', meteredServers.error);
                 } else {
-                    // Fallback if it's a single credential object
+                    // Fallback para un solo objeto
                     iceServers.push(meteredServers);
                     console.log('[DEBUG] Fetched Metered.ca single TURN credential');
                 }
