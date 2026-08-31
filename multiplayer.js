@@ -98,8 +98,16 @@ async function initMultiplayer(asHost = true) {
             const resp = await fetch(TURN_BACKEND_URL);
             if (resp.ok) {
                 const meteredServers = await resp.json();
-                iceServers = iceServers.concat(meteredServers);
-                console.log('[DEBUG] Fetched Metered.ca dynamic TURN credentials:', meteredServers.length, 'servers');
+                if (Array.isArray(meteredServers)) {
+                    iceServers = iceServers.concat(meteredServers);
+                    console.log('[DEBUG] Fetched Metered.ca dynamic TURN credentials:', meteredServers.length, 'servers');
+                } else if (meteredServers.error) {
+                    console.error('[DEBUG] Metered.ca API returned an error JSON:', meteredServers.error);
+                } else {
+                    // Fallback if it's a single credential object
+                    iceServers.push(meteredServers);
+                    console.log('[DEBUG] Fetched Metered.ca single TURN credential');
+                }
             } else {
                 console.warn('[DEBUG] Metered.ca API returned HTTP', resp.status, '- falling back to Open Relay.');
             }
