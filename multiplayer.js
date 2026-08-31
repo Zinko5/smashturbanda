@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.08.01.03';
+const GAME_VERSION = '26.08.01.04';
 // TODO: Reemplaza esto con la URL de tu Cloudflare Worker (ej. 'https://smashturbanda-turn.tu-usuario.workers.dev')
 const TURN_BACKEND_URL = 'https://smashturbanda-turn.gabriel-marcelo-munoz.workers.dev/';
 
