@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.07.06.12';
+const GAME_VERSION = '26.08.01.01';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -1036,15 +1036,16 @@ function handleReceivedData(data, senderConn) {
     if (data.type === 'version_check') {
         console.log(`[DEBUG] Received version check: ${data.version}. Local: ${GAME_VERSION}`);
         if (data.version !== GAME_VERSION) {
-            showToast(`Versión incompatible (Oponente: v${data.version}, Tú: v${GAME_VERSION}). Actualiza la página.`);
-            if (senderConn) {
-                try { senderConn.close(); } catch(e){}
-            }
-            if (!isHost) {
-                setTimeout(() => {
-                    window.location.reload();
-                }, 4000);
-            }
+            console.warn(`%c[VERSION MISMATCH] Remote: v${data.version} | Local: v${GAME_VERSION}. Closing connection.`, 'color: #f59e0b; font-weight: bold; font-size: 14px;');
+            showToast(`⚠️ Versión incompatible (Oponente: v${data.version}, Tú: v${GAME_VERSION}). Recargando con Ctrl+Shift+R...`);
+            // Delay close so the toast is visible and the mismatch message is sent
+            setTimeout(() => {
+                if (senderConn) {
+                    try { senderConn.close(); } catch(e){}
+                }
+                // Force hard reload to bust browser cache
+                window.location.reload(true);
+            }, 3500);
         }
         return;
     }
