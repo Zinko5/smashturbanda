@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.08.01.01';
+const GAME_VERSION = '26.08.01.02';
 let peer = null;
 let connections = []; // Array of guest connections (on Host)
 let connection = null;  // Connection to Host (on Guest)
@@ -82,21 +82,46 @@ async function initMultiplayer(asHost = true) {
 
     const generateRoomCode = () => Math.floor(1000 + Math.random() * 9000).toString();
 
-    // Default to reliable public STUN servers for standard NAT traversal.
-    // We avoid broken/expired public TURN servers by default, as they cause browsers to abort ICE candidate pairing on error.
+    // Default STUN servers for public IP discovery (NAT traversal).
     let iceServers = [
-        {
-            urls: [
-                'stun:stun.l.google.com:19302',
-                'stun:stun1.l.google.com:19302',
-                'stun:stun2.l.google.com:19302',
-                'stun:stun3.l.google.com:19302',
-                'stun:stun4.l.google.com:19302'
-            ]
-        }
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
     ];
 
-    // Add custom user-configured TURN server if present (e.g. if the user wants strict P2P/mobile data relay)
+    // Try to fetch dynamic TURN credentials from Metered.ca API if configured
+    const meteredApiKey = localStorage.getItem('smashturbanda_metered_api_key');
+    if (meteredApiKey) {
+        try {
+            const resp = await fetch(`https://smashturbanda.metered.live/api/v1/turn/credentials?apiKey=${meteredApiKey}`);
+            if (resp.ok) {
+                const meteredServers = await resp.json();
+                iceServers = iceServers.concat(meteredServers);
+                console.log('[DEBUG] Fetched Metered.ca dynamic TURN credentials:', meteredServers.length, 'servers');
+            } else {
+                console.warn('[DEBUG] Metered.ca API returned HTTP', resp.status, '- falling back to Open Relay.');
+            }
+        } catch (err) {
+            console.warn('[DEBUG] Failed to fetch Metered.ca API credentials:', err.message, '- falling back to Open Relay.');
+        }
+    }
+
+    // Default TURN relay servers (Open Relay Project by Metered.ca - free 20GB/month).
+    // Each URL is a separate ICE server object for PeerJS 1.4.7 parser compatibility.
+    // These provide relay fallback when direct P2P fails (symmetric NAT, CGNAT, mobile data).
+    const hasMeteredDynamic = meteredApiKey && iceServers.some(s => s.username && String(s.urls || '').includes('metered'));
+    if (!hasMeteredDynamic) {
+        iceServers.push(
+            { urls: 'stun:openrelay.metered.ca:80' },
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+        );
+        console.log('[DEBUG] Using Open Relay (metered.ca) default TURN servers.');
+    }
+
+    // Add custom user-configured TURN server if present (overrides/supplements the above)
     const customUrl = localStorage.getItem('smashturbanda_turn_url');
     const customUser = localStorage.getItem('smashturbanda_turn_username');
     const customCred = localStorage.getItem('smashturbanda_turn_credential');
@@ -1823,7 +1848,8 @@ document.getElementById('btn-options-menu').addEventListener('click', () => {
     if (typeof playMenuMusic === 'function') playMenuMusic();
     renderOptionsKeys();
 
-    // Populate custom TURN settings
+    // Populate TURN settings
+    document.getElementById('input-metered-api-key').value = localStorage.getItem('smashturbanda_metered_api_key') || '';
     document.getElementById('input-turn-url').value = localStorage.getItem('smashturbanda_turn_url') || '';
     document.getElementById('input-turn-username').value = localStorage.getItem('smashturbanda_turn_username') || '';
     document.getElementById('input-turn-credential').value = localStorage.getItem('smashturbanda_turn_credential') || '';
@@ -1852,7 +1878,8 @@ document.getElementById('btn-options-save').addEventListener('click', () => {
             sfxVolume: sfxVolume
         }));
 
-        // Save custom TURN settings
+        // Save TURN settings
+        localStorage.setItem('smashturbanda_metered_api_key', document.getElementById('input-metered-api-key').value.trim());
         localStorage.setItem('smashturbanda_turn_url', document.getElementById('input-turn-url').value.trim());
         localStorage.setItem('smashturbanda_turn_username', document.getElementById('input-turn-username').value.trim());
         localStorage.setItem('smashturbanda_turn_credential', document.getElementById('input-turn-credential').value.trim());
