@@ -21,3 +21,4 @@
 - No build pipeline (like Webpack or Vite) is active for the production version; it runs directly from vanilla script tags loaded in `index.html`.
 - WebRTC requires secure contexts (HTTPS) in modern browsers, particularly for camera, microphone, or secure signaling over public pages.
 - CPU usage must remain low to prevent visual frame stuttering.
+- **WebRTC Networking Limits**: The game relies entirely on P2P DataChannels. Extensive testing confirms that players on enterprise/public Wi-Fi with "AP Isolation" or mobile data networks in LATAM with strict Deep Packet Inspection (DPI) and Symmetric NAT will permanently stall at connection. No amount of TURN/STUN configuration can bypass aggressive DPI WebRTC blocking. Players must use a VPN or switch to a standard residential Wi-Fi to play online.

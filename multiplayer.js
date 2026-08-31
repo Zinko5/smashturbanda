@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.08.01.05';
+const GAME_VERSION = '26.08.01.06';
 // TODO: Reemplaza esto con la URL de tu Cloudflare Worker (ej. 'https://smashturbanda-turn.tu-usuario.workers.dev')
 const TURN_BACKEND_URL = 'https://smashturbanda-turn.gabriel-marcelo-munoz.workers.dev/';
 
@@ -134,6 +134,14 @@ async function initMultiplayer(asHost = true) {
                     iceServers.push(meteredServers);
                     console.log('[DEBUG] Fetched Metered.ca single TURN credential');
                 }
+
+                // Añadir el OpenRelay oficial gratuito de Metered como último recurso
+                iceServers.push({
+                    urls: ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443", "turn:openrelay.metered.ca:443?transport=tcp"],
+                    username: "openrelayproject",
+                    credential: "openrelayproject"
+                });
+
             } else {
                 console.warn('[DEBUG] Metered.ca API returned HTTP', resp.status, '- falling back to Open Relay.');
             }
