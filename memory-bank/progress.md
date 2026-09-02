@@ -1,7 +1,8 @@
 # Project Progress - Smashturbanda
 
 ## Current Version
-- **Development Version**: `26.08.01.04`
+- **Release Version**: `26.09.01`
+- **Development Version**: `26.09.01.01`
 
 ## What Works
 - **Gameplay System**: Real-time platform physics, platform drop, gravity, collision detection, damage multiplier percentage, and blast zones.

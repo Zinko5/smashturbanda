@@ -3,15 +3,13 @@
 ## Current Focus
 The game's primary features have recently been expanded to support a robust local multiplayer setup (up to 4 players) with gamepad integration, while stabilizing the WebRTC PeerJS P2P connection issues by switching default configuration to Google STUN servers.
 
-## Recent Changes (Patch 26.08.01.06)
-1. **Cloudflare Worker TURN Proxy**: Implemented and perfected a serverless Cloudflare Worker proxy (`multiplayer.js: TURN_BACKEND_URL`) to dynamically fetch Metered.ca TURN credentials using a permanent `apiKey` (GET request). This prevents rate limits and hides the keys from the frontend.
-2. **TURN Server Bundling & Fallbacks**: The frontend now parses Metered's dynamic response to bundle TURN URLs correctly into `iceServers`. It forces standard WebRTC ports (3478, 80, 443) over UDP, TCP, and TLS, and appends `openrelay.metered.ca` as a final fallback.
-3. **WebRTC P2P Over Mobile Data Diagnosis**: Conducted exhaustive cross-device testing. Confirmed that the codebase perfectly gathers and relays ICE candidates, but fails to connect over certain mobile networks (and Wi-Fi routers with AP Isolation) due to aggressive ISP-level Deep Packet Inspection (DPI) and UDP/WebRTC blocking.
+## Recent Changes (Patch 26.09.01 - Versión de Lanzamiento)
+1. **Damage & Balance Centralization**: Created [damageConfig.js](file:///home/zinko/publico/smashturbanda/damageConfig.js) (`DAMAGE_CONFIG`) to decouple all damage, knockback, damage types ('golpe'/'explosivo'), Yone soul form bonuses, and ability cooldowns in seconds from engine code in [game.js](file:///home/zinko/publico/smashturbanda/game.js).
+2. **Launch Release 26.09.01**: Generated official patch notes in [26.09.01.md](file:///home/zinko/publico/smashturbanda/notas-del-parche/finales/26.09.01.md), promotional Typst poster in [26.09.01.typ](file:///home/zinko/publico/smashturbanda/notas-del-parche/promocion/26.09.01.typ), and updated `GAME_VERSION` in `multiplayer.js` and `index.html`.
 
 ## Next Steps
 - Inform players that online multiplayer requires standard residential Wi-Fi or a VPN if their mobile provider strictly blocks WebRTC P2P.
-- Verify if any additional game balance or character selection UI enhancements are requested.
-- Monitor console debug outputs for any new PeerJS issues.
+- Monitor mobile gameplay user experience and touch input responsiveness.
 
 ## Active Decisions
 - Keep external assets minimal: The project utilizes pure JavaScript logic, drawing sprites dynamically on HTML5 canvas or styling with CSS, preventing reliance on heavy image sprites sheets.

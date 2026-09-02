@@ -188,9 +188,22 @@ function readGamepadState(gamepadIndex) {
     return { left, right, up, down, jump, attackA, attackB, shield, grab, anyButton };
 }
 
+// Mobile Touch Input State
+const mobileInputState = {
+    left: false,
+    right: false,
+    up: false,
+    down: false,
+    jump: false,
+    attackA: false,
+    attackB: false,
+    shield: false,
+    grab: false,
+};
+
 /**
  * Get combined input state for a player slot (0-indexed).
- * Merges keyboard state and gamepad state with OR logic.
+ * Merges keyboard state, gamepad state, and mobile touch state (for P1) with OR logic.
  * playerSlot: 0=P1, 1=P2, 2=P3, 3=P4
  */
 function getPlayerInputState(playerSlot) {
@@ -210,26 +223,42 @@ function getPlayerInputState(playerSlot) {
         grab:    keysPressed[layout.grab]    || false,
     };
 
+    // Mobile Touch State (only for P1 / Local user)
+    const mobile = (playerSlot === 0) ? mobileInputState : {
+        left: false, right: false, up: false, down: false, jump: false, attackA: false, attackB: false, shield: false, grab: false
+    };
+
     // Gamepad state
     const gpIndex = gamepadBindings[playerSlot];
     if (gpIndex !== null && gpIndex !== undefined) {
         const gp = readGamepadState(gpIndex);
         if (gp) {
             return {
-                left:    kb.left    || gp.left,
-                right:   kb.right   || gp.right,
-                up:      kb.up      || gp.up,
-                down:    kb.down    || gp.down,
-                jump:    kb.jump    || gp.jump,
-                attackA: kb.attackA || gp.attackA,
-                attackB: kb.attackB || gp.attackB,
-                shield:  kb.shield  || gp.shield,
-                grab:    kb.grab    || gp.grab,
+                left:    kb.left    || gp.left    || mobile.left,
+                right:   kb.right   || gp.right   || mobile.right,
+                up:      kb.up      || gp.up      || mobile.up,
+                down:    kb.down    || gp.down    || mobile.down,
+                jump:    kb.jump    || gp.jump    || mobile.jump,
+                attackA: kb.attackA || gp.attackA || mobile.attackA,
+                attackB: kb.attackB || gp.attackB || mobile.attackB,
+                shield:  kb.shield  || gp.shield  || mobile.shield,
+                grab:    kb.grab    || gp.grab    || mobile.grab,
             };
         }
     }
 
-    return kb;
+    // If no gamepad, return keyboard OR mobile
+    return {
+        left:    kb.left    || mobile.left,
+        right:   kb.right   || mobile.right,
+        up:      kb.up      || mobile.up,
+        down:    kb.down    || mobile.down,
+        jump:    kb.jump    || mobile.jump,
+        attackA: kb.attackA || mobile.attackA,
+        attackB: kb.attackB || mobile.attackB,
+        shield:  kb.shield  || mobile.shield,
+        grab:    kb.grab    || mobile.grab,
+    };
 }
 
 /**
@@ -308,4 +337,71 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sliderSfx) {
         sliderSfx.value = sfxVolume;
     }
+
+    // --- Mobile Touch Controls Binding ---
+    const touchBtns = document.querySelectorAll('.touch-btn');
+    touchBtns.forEach(btn => {
+        const keyMap = btn.getAttribute('data-key');
+        if (!keyMap) return;
+
+        const setMobileKey = (state) => {
+            mobileInputState[keyMap] = state;
+            if (state) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        };
+
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling/zooming
+            setMobileKey(true);
+            initAudio(); // Initialize audio context on touch
+        }, { passive: false });
+
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            setMobileKey(false);
+        }, { passive: false });
+
+        btn.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            setMobileKey(false);
+        }, { passive: false });
+    });
+
+    // --- Mobile Rotation Prompt & Fullscreen API ---
+    const btnForceLandscape = document.getElementById('btn-force-landscape');
+    if (btnForceLandscape) {
+        btnForceLandscape.addEventListener('click', async () => {
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    await document.documentElement.webkitRequestFullscreen();
+                }
+                
+                if (screen.orientation && screen.orientation.lock) {
+                    await screen.orientation.lock('landscape').catch(() => {});
+                }
+            } catch (err) {
+                console.warn("Could not force landscape fullscreen:", err);
+            }
+            document.getElementById('mobile-rotation-prompt').classList.add('hidden');
+        });
+    }
+
+    // Dynamically manage rotation prompt based on actual viewport orientation
+    const checkOrientation = () => {
+        const prompt = document.getElementById('mobile-rotation-prompt');
+        if (!prompt) return;
+        if (window.innerWidth > window.innerHeight) {
+            prompt.classList.add('hidden');
+        } else {
+            prompt.classList.remove('hidden');
+        }
+    };
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
 });

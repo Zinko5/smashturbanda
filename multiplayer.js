@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.08.01.06';
+const GAME_VERSION = '26.09.01';
 // TODO: Reemplaza esto con la URL de tu Cloudflare Worker (ej. 'https://smashturbanda-turn.tu-usuario.workers.dev')
 const TURN_BACKEND_URL = 'https://smashturbanda-turn.gabriel-marcelo-munoz.workers.dev/';
 
@@ -1994,6 +1994,8 @@ document.getElementById('btn-pause-lobby').addEventListener('click', () => {
         gameEngine.updateInterval = null;
     }
     document.getElementById('game-hud').classList.add('hidden');
+    const mobileControls = document.getElementById('mobile-controls');
+    if (mobileControls) mobileControls.classList.add('hidden');
     const timerEl = document.getElementById('game-timer');
     if (timerEl) timerEl.classList.add('hidden');
     document.getElementById('menu-pause').classList.add('hidden');

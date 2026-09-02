@@ -53,6 +53,42 @@
             <span id="game-controls-text"></span>
         </div>
 
+        <!-- Mobile Touch Controls -->
+        <div id="mobile-controls" class="hidden">
+            <!-- Left D-Pad (Movement & Down Drop) -->
+            <div class="touch-dpad">
+                <div class="dpad-middle">
+                    <button class="touch-btn touch-left" data-key="left"><i data-lucide="chevron-left"></i></button>
+                    <button class="touch-btn touch-right" data-key="right"><i data-lucide="chevron-right"></i></button>
+                </div>
+                <button class="touch-btn touch-down" data-key="down"><i data-lucide="chevron-down"></i></button>
+            </div>
+            <!-- Right Action Buttons -->
+            <div class="touch-actions">
+                <div class="actions-top">
+                    <button class="touch-btn action-grab" data-key="grab">OBJ</button>
+                    <button class="touch-btn action-atk-b" data-key="attackB">ESP</button>
+                </div>
+                <div class="actions-middle">
+                    <button class="touch-btn action-atk-a" data-key="attackA">ATK</button>
+                    <button class="touch-btn action-shield" data-key="shield">ESC</button>
+                </div>
+                <button class="touch-btn action-jump" data-key="jump">SLT</button>
+            </div>
+        </div>
+
+        <!-- Mobile Rotation Prompt -->
+        <div id="mobile-rotation-prompt" class="overlay">
+            <div class="menu-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; transform: skewX(0); max-width: 90%;">
+                <i data-lucide="smartphone" style="font-size: 4rem; margin-bottom: 20px; color: var(--accent); transform: skewX(0); width: 64px; height: 64px;"></i>
+                <h2 style="text-align: center; margin-bottom: 15px; border: none; padding: 0;">Gira tu teléfono</h2>
+                <p style="color: #94a3b8; margin-bottom: 25px;">Smashturbanda se juega mejor en horizontal (apaisado).</p>
+                <button id="btn-force-landscape" class="primary" style="transform: skewX(0); width: 100%;">
+                    Jugar en Pantalla Completa
+                </button>
+            </div>
+        </div>
+
         <!-- Notification Toast -->
         <div id="toast" class="toast-msg hidden"></div>
 
@@ -74,7 +110,7 @@
             </div>
             <div
                 style="position: absolute; bottom: 15px; right: 20px; font-size: 0.85rem; color: #64748b; font-family: 'Outfit', sans-serif; pointer-events: none;">
-                v26.08.01.06</div>
+                v26.09.01</div>
         </div>
 
         <!-- OVERLAY: Character & Stage Selection (CSS) -->
@@ -469,6 +505,7 @@
     <script src="audio.js?v=20260717"></script>
     <script src="input.js?v=20260717"></script>
     <script src="physics.js?v=20260717"></script>
+    <script src="damageConfig.js?v=20260901"></script>
     <script src="game.js?v=20260717"></script>
     <script src="multiplayer.js?v=26.07.06.12"></script>
     <script>

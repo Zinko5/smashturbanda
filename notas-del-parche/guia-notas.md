@@ -12,6 +12,8 @@ Se distinguen dos tipos de versiones:
 1. **Parches de desarrollo o miniparches (`dd`)**: Versiones internas de avance. Sus notas se documentan en el `.md`, pero no se hacen públicas con afiches.
 2. **Parches finales (`cc`)**: Versiones oficiales de lanzamiento. Son las únicas que se publican formalmente al público.
 
+Cuando un parche (compuesto de miniparches) llega a su versión final/estable/de lanzamiento, se debe generar un afiche promocional usando Typst. Por ejemplo: si se dictamina que una versión como 26.08.01.08 es la versión de lanzamiento, entonces el parche de lanzamiento y que debe ser publicitado es el 26.08.01
+
 ---
 
 ## Documentación y Directorios

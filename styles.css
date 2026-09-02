@@ -63,6 +63,10 @@ canvas {
     -webkit-backdrop-filter: blur(12px);
     z-index: 200; /* Overlay level from contract */
     transition: opacity 0.3s var(--physics-ease), transform 0.3s var(--physics-ease);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px 10px;
 }
 
 /* Diagonal split background for overlays */
@@ -1141,3 +1145,189 @@ select:hover, select:focus {
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.3) !important;
 }
 
+/* =========================================
+   Mobile Compatibility & Extreme Responsiveness
+   ========================================= */
+
+/* Mobile Touch Controls */
+#mobile-controls {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    pointer-events: none;
+    z-index: 150; /* Above canvas, below menus */
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 30px;
+}
+
+/* Base button styles */
+.touch-btn {
+    pointer-events: auto;
+    background: rgba(26, 15, 31, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.7);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: bold;
+    backdrop-filter: blur(4px);
+    transition: all 0.1s ease;
+    transform: skewX(0); /* Un-skewed for mobile */
+}
+.touch-btn i {
+    transform: skewX(0);
+}
+.touch-btn:active, .touch-btn.active {
+    background: rgba(255, 204, 0, 0.4);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: scale(0.9);
+}
+
+/* D-Pad Layout */
+.touch-dpad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.dpad-middle {
+    display: flex;
+    gap: 60px;
+}
+
+/* Actions Layout */
+.touch-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.actions-top, .actions-middle {
+    display: flex;
+    gap: 60px;
+}
+
+/* Specific colors */
+.action-atk-a { border-color: rgba(255, 0, 85, 0.3); color: rgba(255, 0, 85, 0.8); }
+.action-atk-b { border-color: rgba(0, 204, 255, 0.3); color: rgba(0, 204, 255, 0.8); }
+.action-jump  { border-color: rgba(0, 255, 0, 0.3); color: rgba(0, 255, 0, 0.8); }
+.action-grab  { border-color: rgba(255, 204, 0, 0.3); color: rgba(255, 204, 0, 0.8); }
+
+.action-atk-a:active, .action-atk-a.active { background: rgba(255, 0, 85, 0.4); border-color: var(--p2-red); color: white; }
+.action-atk-b:active, .action-atk-b.active { background: rgba(0, 204, 255, 0.4); border-color: var(--p1-blue); color: white; }
+.action-jump:active,  .action-jump.active  { background: rgba(0, 255, 0, 0.4); border-color: var(--energy-green); color: white; }
+.action-grab:active,  .action-grab.active  { background: rgba(255, 204, 0, 0.4); border-color: var(--accent); color: white; }
+
+/* Hide touch controls on desktop pointer devices */
+@media (pointer: fine) {
+    #mobile-controls {
+        display: none !important;
+    }
+}
+
+/* Hide PC keyboard control overlay on touch/coarse devices or small screens */
+@media (pointer: coarse), (max-width: 900px) {
+    #game-controls-overlay {
+        display: none !important;
+    }
+}
+
+/* Rotation Prompt & Extreme Responsiveness */
+@media (max-width: 900px), (max-height: 500px) {
+    .overlay {
+        justify-content: flex-start;
+        padding-top: 15px;
+        padding-bottom: 25px;
+    }
+
+    /* Responsive UI Scaling */
+    .menu-card {
+        padding: 15px 20px;
+        transform: skewX(0); /* Remove skewing on small screens for better readability */
+        max-height: 90vh;
+        overflow-y: auto;
+        margin: auto 0;
+    }
+    .menu-card > * {
+        transform: skewX(0);
+    }
+    button, input[type="text"], .name-card, .char-card, .stage-card {
+        transform: skewX(0);
+    }
+    button span, button i, button svg, .char-avatar, .char-name, .char-class {
+        transform: skewX(0);
+    }
+    
+    h1 { font-size: 1.6rem; margin-bottom: 5px; }
+    h2 { font-size: 1.2rem; }
+    .menu-card p { font-size: 0.8rem; margin-bottom: 10px !important; }
+    .btn-group { gap: 8px; }
+    .btn-group button { padding: 10px 16px; font-size: 0.9rem; }
+    
+    /* Grids compaction */
+    .name-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .char-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+    }
+    .stage-grid, .stage-voting-grid {
+        gap: 10px;
+    }
+    .stage-vote-card {
+        width: 140px !important;
+        padding: 8px !important;
+    }
+    
+    /* CSS Menu (Character Select) Layout */
+    .menu-css-container {
+        flex-direction: column;
+        overflow-y: auto;
+        justify-content: flex-start;
+        padding: 20px;
+        gap: 15px;
+    }
+    .menu-css-main, .menu-css-sidebar {
+        width: 100%;
+        max-height: none;
+    }
+    
+    /* HUD Scaling & Repositioning for Mobile */
+    #game-hud {
+        gap: 20px;
+        top: 8px;
+        bottom: auto;
+        padding: 4px 14px;
+        transform: translateX(-50%) skewX(0);
+        background: rgba(18, 10, 22, 0.75);
+        border-width: 1px;
+    }
+    .hud-player { transform: skewX(0); }
+    .hud-damage { font-size: 1.4rem; font-weight: 700; }
+    .hud-name { font-size: 0.7rem; }
+    .stock-dot { width: 8px; height: 8px; }
+}
+
+/* Rotation Request - only show on portrait mobile */
+@media (orientation: portrait) and (max-width: 768px) {
+    #mobile-rotation-prompt {
+        display: flex !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transform: scale(1) translateY(0) !important;
+        background: rgba(10, 5, 12, 0.98);
+        z-index: 9999;
+    }
+}
