@@ -37,6 +37,9 @@ Para cada **parche final (`cc`)**, se debe generar un afiche promocional usando 
 * **Contenido permitido:** Únicamente deben mostrar las secciones de *Nuevas características o funciones* y *Correcciones de bugs antiguos*. Se excluyen explícitamente las correcciones de bugs de características nuevas.
 
 Los afiches se generan indicando lo más significativo de cada microparche, no solo del último
+
+Los afiches son para el público general de jugadores, no para desarrolladores, por lo que deben ir enfocados en gameplay y la experiencia del usuario, sin cosas muy técnicas 
+
 ---
 
 ## Flujo de Trabajo en Git
@@ -69,7 +72,7 @@ git tag -a vaa.bb.cc -m "Parche público aa.bb.cc"
 
 3. Se envían los cambios y la etiqueta al repositorio remoto:
 ```bash
-git push origin <rama-actual> --tags
+git push origin <rama-actual> --follow-tags
 ```
 
 ## Versión mostrada en el juego
