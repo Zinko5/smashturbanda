@@ -125,4 +125,4 @@ Base corner radius: 8px. See rounded tokens in front matter for the full scale.
 
 ## Use Case
 
-Landing pages, Modern websites
+Landing pages, Modern websites.
