@@ -72,7 +72,7 @@ git tag -a vaa.bb.cc -m "Parche público aa.bb.cc"
 
 3. Se envían los cambios y la etiqueta al repositorio remoto:
 ```bash
-git push origin <rama-actual> --follow-tags
+git push origin <rama-actual> && git push origin --tags
 ```
 
 ## Versión mostrada en el juego
