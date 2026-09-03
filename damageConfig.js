@@ -77,19 +77,20 @@ const DAMAGE_CONFIG = {
             cooldown: 1.76      // 1.76 segundos (~106 frames)
         },
         palomo: {
-            bombMin: 12,
-            bombMax: 22,
+            bombMin: 16,
+            bombMax: 26,
             cooldown: 0.50,     // 0.50 segundos (~30 frames)
             type: 'explosivo'
         },
         blitzcrank: {
-            hookMin: 3,
-            hookMax: 7,
+            hookMin: 6,
+            hookMax: 10,
             cooldown: 2.67,     // 2.67 segundos (~160 frames)
             type: 'golpe'
         },
         yone: {
             markDamagePercent: 0.30,             // 30% del daño acumulado infligido al retornar al cuerpo
+            markKnockbackMultiplier: 1.35,      // Multiplicador de empuje para la detonación de la marca
             soulDamageBonusPercent: 0.20,       // +20% (0.20) de daño extra en ataques básicos durante Forma Espiritual
             soulAttackSpeedBonusPercent: 0.25, // +25% (0.25) de velocidad de ataque (reduce el bloqueo de acción)
             cooldown: 5.67,                     // Cooldown tras regresar al cuerpo (5.67 segundos ~340 frames)
@@ -102,7 +103,7 @@ const DAMAGE_CONFIG = {
             bombType: 'explosivo',
             upSpecialRadius: 40,
             upSpecialType: 'explosivo',
-            cooldown: 0.65      // 0.75 segundos (~45 frames)
+            cooldown: 0.55
         },
         terranova: {
             wallMin: 10,
@@ -111,9 +112,9 @@ const DAMAGE_CONFIG = {
             type: 'golpe'
         },
         sett: {
-            slamBase: 9,
-            slamDistMultiplier: 0.0375,
-            explosionRadius: 50,
+            slamBase: 8,
+            slamDistMultiplier: 0.0500,
+            explosionRadius: 45,
             cooldown: 3.00,     // 3.00 segundos (~180 frames)
             type: 'explosivo'
         }

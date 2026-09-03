@@ -1,4 +1,4 @@
-const GAME_VERSION = '26.09.01';
+const GAME_VERSION = '26.09.02';
 // TODO: Reemplaza esto con la URL de tu Cloudflare Worker (ej. 'https://smashturbanda-turn.tu-usuario.workers.dev')
 const TURN_BACKEND_URL = 'https://smashturbanda-turn.gabriel-marcelo-munoz.workers.dev/';
 
@@ -1057,7 +1057,7 @@ function sendLobbySync() {
     });
     lobbyPlayersState = players;
 
-    const stageVotes = { battlefield: 0, destination: 0, moving: 0, random: 0 };
+    const stageVotes = { battlefield: 0, destination: 0, moving: 0, islands: 0, castle: 0, pyramid: 0, volcano: 0, zeppelin: 0, temple: 0, random: 0 };
     if (selectedStageLocal) stageVotes[selectedStageLocal]++;
     connections.forEach(conn => {
         if (conn.selectedStage) {
@@ -1386,7 +1386,7 @@ function startStageSelectionCountdown() {
 
             // Host or Local calculates weighted winner
             if (gameEngine.mode !== 'vs_online' || isHost) {
-                const votes = { battlefield: 0, destination: 0, moving: 0, random: 0 };
+                const votes = { battlefield: 0, destination: 0, moving: 0, islands: 0, castle: 0, pyramid: 0, volcano: 0, zeppelin: 0, temple: 0, random: 0 };
                 if (selectedStageLocal) votes[selectedStageLocal]++;
                 if (gameEngine.mode === 'vs_online') {
                     connections.forEach(conn => {
@@ -1403,9 +1403,10 @@ function startStageSelectionCountdown() {
                     }
                 });
 
-                let chosenStage = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : ['battlefield', 'destination', 'moving'][Math.floor(Math.random() * 3)];
+                const allStagesList = ['battlefield', 'destination', 'moving', 'islands', 'castle', 'pyramid', 'volcano', 'zeppelin', 'temple'];
+                let chosenStage = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : allStagesList[Math.floor(Math.random() * allStagesList.length)];
                 if (chosenStage === 'random') {
-                    chosenStage = ['battlefield', 'destination', 'moving'][Math.floor(Math.random() * 3)];
+                    chosenStage = allStagesList[Math.floor(Math.random() * allStagesList.length)];
                 }
 
                 if (gameEngine.mode === 'vs_online') {
@@ -1425,7 +1426,7 @@ function startStageSelectionCountdown() {
 }
 
 function updateStageVotes() {
-    const votes = { battlefield: 0, destination: 0, moving: 0, random: 0 };
+    const votes = { battlefield: 0, destination: 0, moving: 0, islands: 0, castle: 0, pyramid: 0, volcano: 0, zeppelin: 0, temple: 0, random: 0 };
     if (selectedStageLocal) votes[selectedStageLocal]++;
 
     if (gameEngine.mode === 'vs_online') {
@@ -1471,7 +1472,7 @@ function updateStageVotes() {
 }
 
 function runRouletteAnimation(winningStage, callback) {
-    const stages = ['battlefield', 'destination', 'moving', 'random'];
+    const stages = ['battlefield', 'destination', 'moving', 'islands', 'castle', 'pyramid', 'volcano', 'zeppelin', 'temple', 'random'];
     let currentIndex = 0;
     let delay = 80;
     let iterations = 0;

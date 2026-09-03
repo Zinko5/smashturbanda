@@ -339,34 +339,81 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Mobile Touch Controls Binding ---
-    const touchBtns = document.querySelectorAll('.touch-btn');
-    touchBtns.forEach(btn => {
-        const keyMap = btn.getAttribute('data-key');
-        if (!keyMap) return;
+    if (window.lucide && lucide.createIcons) {
+        try { lucide.createIcons(); } catch (err) {}
+    }
 
-        const setMobileKey = (state) => {
-            mobileInputState[keyMap] = state;
-            if (state) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
+    const updateTouchInputState = () => {
+        mobileInputState.left = false;
+        mobileInputState.right = false;
+        mobileInputState.up = false;
+        mobileInputState.down = false;
+        mobileInputState.jump = false;
+        mobileInputState.attackA = false;
+        mobileInputState.attackB = false;
+        mobileInputState.shield = false;
+        mobileInputState.grab = false;
+
+        document.querySelectorAll('.touch-btn.active').forEach(btn => {
+            const rawKey = btn.getAttribute('data-key');
+            if (rawKey) {
+                rawKey.split(',').forEach(k => {
+                    mobileInputState[k.trim()] = true;
+                });
             }
+        });
+    };
+
+    const dpadContainer = document.querySelector('.touch-dpad');
+
+    // 8-Way D-Pad touch dragging & multi-direction support
+    if (dpadContainer) {
+        const handleDpadTouches = (e) => {
+            e.preventDefault();
+            dpadContainer.querySelectorAll('.dpad-btn').forEach(b => b.classList.remove('active'));
+
+            for (let i = 0; i < e.touches.length; i++) {
+                const touch = e.touches[i];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                if (target) {
+                    const btn = target.closest('.dpad-btn');
+                    if (btn && dpadContainer.contains(btn)) {
+                        btn.classList.add('active');
+                    }
+                }
+            }
+            updateTouchInputState();
+            if (typeof initAudio === 'function') initAudio();
         };
 
+        dpadContainer.addEventListener('touchstart', handleDpadTouches, { passive: false });
+        dpadContainer.addEventListener('touchmove', handleDpadTouches, { passive: false });
+        dpadContainer.addEventListener('touchend', handleDpadTouches, { passive: false });
+        dpadContainer.addEventListener('touchcancel', handleDpadTouches, { passive: false });
+    }
+
+    // Action buttons (right side)
+    const touchBtns = document.querySelectorAll('.touch-btn');
+    touchBtns.forEach(btn => {
+        if (btn.classList.contains('dpad-btn')) return;
+
         btn.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Prevent scrolling/zooming
-            setMobileKey(true);
-            initAudio(); // Initialize audio context on touch
+            e.preventDefault();
+            btn.classList.add('active');
+            updateTouchInputState();
+            if (typeof initAudio === 'function') initAudio();
         }, { passive: false });
 
         btn.addEventListener('touchend', (e) => {
             e.preventDefault();
-            setMobileKey(false);
+            btn.classList.remove('active');
+            updateTouchInputState();
         }, { passive: false });
 
         btn.addEventListener('touchcancel', (e) => {
             e.preventDefault();
-            setMobileKey(false);
+            btn.classList.remove('active');
+            updateTouchInputState();
         }, { passive: false });
     });
 

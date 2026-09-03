@@ -331,6 +331,95 @@ const STAGES = {
             { x: 720, y: 480 },
             { x: 980, y: 480 }
         ]
+    },
+    islands: {
+        platforms: [
+            { x: 80, y: 560, w: 420, h: 40, semi: false, terrainType: 'duro' },  // Isla Izquierda
+            { x: 700, y: 560, w: 420, h: 40, semi: false, terrainType: 'duro' }, // Isla Derecha
+            { x: 500, y: 440, w: 200, h: 12, semi: true, terrainType: 'traspasable', moving: true, rangeX: [360, 640], dirX: 1, speedX: 1.5 }, // Puente Central Móvil
+            { x: 140, y: 380, w: 220, h: 12, semi: true, terrainType: 'traspasable' }, // Plataforma Alta Izq
+            { x: 840, y: 380, w: 220, h: 12, semi: true, terrainType: 'traspasable' }  // Plataforma Alta Der
+        ],
+        spawn: [
+            { x: 180, y: 480 },
+            { x: 800, y: 480 },
+            { x: 300, y: 480 },
+            { x: 920, y: 480 }
+        ]
+    },
+    castle: {
+        platforms: [
+            { x: 100, y: 570, w: 1000, h: 40, semi: false, terrainType: 'duro' }, // Puente Base
+            { x: 450, y: 430, w: 300, h: 16, semi: false, terrainType: 'rompible', maxHp: 35 }, // Piso Inferior Torre (Destructible)
+            { x: 500, y: 300, w: 200, h: 16, semi: false, terrainType: 'rompible', maxHp: 30 }, // Piso Superior Torre (Destructible)
+            { x: 180, y: 410, w: 200, h: 12, semi: true, terrainType: 'traspasable' }, // Flanco Izquierdo
+            { x: 820, y: 410, w: 200, h: 12, semi: true, terrainType: 'traspasable' }  // Flanco Derecho
+        ],
+        spawn: [
+            { x: 220, y: 500 },
+            { x: 550, y: 360 },
+            { x: 880, y: 500 },
+            { x: 600, y: 230 }
+        ]
+    },
+    pyramid: {
+        platforms: [
+            { x: 120, y: 560, w: 960, h: 40, semi: false, terrainType: 'duro' }, // Base Principal
+            { x: 220, y: 430, w: 450, h: 12, semi: true, terrainType: 'traspasable' }, // Escalón Nivel 1
+            { x: 360, y: 310, w: 320, h: 12, semi: true, terrainType: 'traspasable' }, // Escalón Nivel 2
+            { x: 460, y: 190, w: 180, h: 12, semi: true, terrainType: 'traspasable' }, // Cima Nivel 3
+            { x: 920, y: 400, w: 160, h: 12, semi: true, terrainType: 'traspasable', moving: true, rangeY: [220, 480], dirY: 1, speedY: 1.8 } // Ascensor Flanco
+        ],
+        spawn: [
+            { x: 250, y: 480 },
+            { x: 500, y: 480 },
+            { x: 400, y: 240 },
+            { x: 950, y: 320 }
+        ]
+    },
+    volcano: {
+        platforms: [
+            { x: 350, y: 560, w: 500, h: 40, semi: false, terrainType: 'duro' }, // Núcleo Central Duro
+            { x: 140, y: 400, w: 170, h: 12, semi: true, terrainType: 'traspasable', moving: true, rangeY: [200, 480], dirY: 1, speedY: 1.6 }, // Ascensor Izq
+            { x: 890, y: 400, w: 170, h: 12, semi: true, terrainType: 'traspasable', moving: true, rangeY: [200, 480], dirY: -1, speedY: 1.6 }, // Ascensor Der
+            { x: 450, y: 320, w: 300, h: 12, semi: true, terrainType: 'traspasable' } // Plataforma Superior
+        ],
+        spawn: [
+            { x: 420, y: 480 },
+            { x: 720, y: 480 },
+            { x: 190, y: 320 },
+            { x: 940, y: 320 }
+        ]
+    },
+    zeppelin: {
+        platforms: [
+            { x: 100, y: 560, w: 380, h: 40, semi: false, terrainType: 'duro' }, // Cubierta Popa
+            { x: 720, y: 560, w: 380, h: 40, semi: false, terrainType: 'duro' }, // Cubierta Proa
+            { x: 480, y: 560, w: 240, h: 16, semi: false, terrainType: 'rompible', maxHp: 30 }, // Puente Conector Destructible
+            { x: 200, y: 380, w: 220, h: 12, semi: true, terrainType: 'traspasable' }, // Mástil Popa
+            { x: 780, y: 380, w: 220, h: 12, semi: true, terrainType: 'traspasable' }, // Mástil Proa
+            { x: 480, y: 260, w: 240, h: 12, semi: true, terrainType: 'traspasable' }  // Cofia Superior
+        ],
+        spawn: [
+            { x: 220, y: 480 },
+            { x: 850, y: 480 },
+            { x: 550, y: 480 },
+            { x: 550, y: 200 }
+        ]
+    },
+    temple: {
+        platforms: [
+            { x: 120, y: 560, w: 360, h: 36, semi: false, terrainType: 'duro' }, // Altar Izquierdo
+            { x: 720, y: 500, w: 360, h: 36, semi: false, terrainType: 'duro' }, // Altar Derecho Elevado
+            { x: 480, y: 420, w: 200, h: 12, semi: true, terrainType: 'traspasable', moving: true, rangeX: [360, 640], dirX: 1, speedX: 1.6 }, // Puente Flotante Móvil
+            { x: 420, y: 260, w: 360, h: 12, semi: true, terrainType: 'traspasable' } // Santuario Superior
+        ],
+        spawn: [
+            { x: 220, y: 480 },
+            { x: 820, y: 420 },
+            { x: 520, y: 340 },
+            { x: 520, y: 200 }
+        ]
     }
 };
 
@@ -500,21 +589,15 @@ function completeYoneReturn(p) {
             const accumulated = opp.yoneDamageAccumulated || 0;
             const extraDamage = Math.round(accumulated * DAMAGE_CONFIG.specials.yone.markDamagePercent);
             if (extraDamage > 0) {
-                applyHit(p, opp, extraDamage);
-
-                // Push/knockback marked enemies
-                const kbForce = (extraDamage * 0.8 * (1 + opp.damage / 100)) * (100 / opp.charData.weight);
-                const pushAngle = p.facing === 1 ? -Math.PI / 6 : -5 * Math.PI / 6;
-                opp.vx = Math.cos(pushAngle) * kbForce * 1.2;
-                opp.vy = Math.sin(pushAngle) * kbForce * 0.9;
-                opp.hitStun = Math.max(15, Math.floor(kbForce * 2.5));
+                const kbMultiplier = DAMAGE_CONFIG.specials.yone.markKnockbackMultiplier || 1.35;
+                applyHit(p, opp, extraDamage, null, kbMultiplier);
             }
             opp.yoneMarkedBy = null;
             opp.yoneDamageAccumulated = 0;
         }
     });
 
-    p.yoneCooldown = DAMAGE_CONFIG.specials.yone.cooldown;
+    p.yoneCooldown = secondsToFrames(DAMAGE_CONFIG.specials.yone.cooldown);
 }
 
 
@@ -524,7 +607,7 @@ function fireBlitzcrankHook(p, progress, keys) {
     const speed = 12 + progress * 8;
     const maxRange = 150 + progress * 400;
 
-    let dirX = p.facing;
+    let dirX = 0;
     let dirY = 0;
     if (keys.up) {
         dirY = -1;
@@ -535,6 +618,9 @@ function fireBlitzcrankHook(p, progress, keys) {
         dirX = -1;
     } else if (keys.right) {
         dirX = 1;
+    }
+    if (dirX === 0 && dirY === 0) {
+        dirX = p.facing;
     }
 
     const len = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -1217,11 +1303,21 @@ class SmashGame {
                     this.platforms.splice(i, 1);
                 }
             } else if (plat.moving) {
-                plat.y += plat.speedY * plat.dirY;
-                if (plat.y >= plat.rangeY[1]) {
-                    plat.dirY = -1;
-                } else if (plat.y <= plat.rangeY[0]) {
-                    plat.dirY = 1;
+                if (plat.speedY) {
+                    plat.y += plat.speedY * plat.dirY;
+                    if (plat.y >= plat.rangeY[1]) {
+                        plat.dirY = -1;
+                    } else if (plat.y <= plat.rangeY[0]) {
+                        plat.dirY = 1;
+                    }
+                }
+                if (plat.speedX) {
+                    plat.x += plat.speedX * plat.dirX;
+                    if (plat.x >= plat.rangeX[1]) {
+                        plat.dirX = -1;
+                    } else if (plat.x <= plat.rangeX[0]) {
+                        plat.dirX = 1;
+                    }
                 }
             }
         }
@@ -2073,7 +2169,8 @@ class SmashGame {
                                     let dirX = 0, dirY = 0;
                                     if (keys.up) dirY = -1;
                                     else if (keys.down) dirY = 1;
-                                    if (keys.left || keys.right) dirX = p.facing;
+                                    if (keys.left) dirX = -1;
+                                    else if (keys.right) dirX = 1;
                                     if (dirX === 0 && dirY === 0) dirX = p.facing;
                                     const len = Math.sqrt(dirX * dirX + dirY * dirY);
                                     p.velozDashDirX = dirX / len;
@@ -2094,7 +2191,8 @@ class SmashGame {
                                 let dirX = 0, dirY = 0;
                                 if (keys.up) dirY = -1;
                                 else if (keys.down) dirY = 1;
-                                if (keys.left || keys.right) dirX = p.facing;
+                                if (keys.left) dirX = -1;
+                                else if (keys.right) dirX = 1;
                                 if (dirX === 0 && dirY === 0) dirX = p.facing;
                                 const len = Math.sqrt(dirX * dirX + dirY * dirY);
                                 p.velozDashDirX = dirX / len;
@@ -2459,6 +2557,9 @@ class SmashGame {
                 p.vy = 0;
                 p.isGrounded = true;
                 p.jumpsUsed = 0;
+                if (plat.moving && plat.speedX) {
+                    p.x += plat.speedX * plat.dirX;
+                }
                 break;
             }
         }
@@ -2776,21 +2877,22 @@ class SmashGame {
             if (plat.terrainType === 'traspasable') {
                 this.ctx.fillStyle = '#475569';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-                // Glass top
-                this.ctx.fillStyle = '#94a3b8';
+                // Glass / Moving top trim
+                this.ctx.fillStyle = plat.moving ? '#38bdf8' : '#94a3b8';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, 3);
             } else if (plat.terrainType === 'rompible') {
                 // Brown brick color for breakable
-                this.ctx.fillStyle = '#78350f';
+                const hpRatio = (plat.hp !== undefined && plat.maxHp) ? plat.hp / plat.maxHp : 1.0;
+                this.ctx.fillStyle = hpRatio < 0.5 ? '#451a03' : '#78350f';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-                this.ctx.fillStyle = '#d97706'; // orange trim
+                this.ctx.fillStyle = hpRatio < 0.5 ? '#b45309' : '#f59e0b'; // orange/yellow trim
                 this.ctx.fillRect(plat.x, plat.y, plat.w, 3);
             } else {
                 // Main platform / Duro
                 this.ctx.fillStyle = '#1e293b';
                 this.ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
 
-                this.ctx.fillStyle = '#6366f1'; // Glowing trim
+                this.ctx.fillStyle = plat.moving ? '#38bdf8' : '#6366f1'; // Glowing trim
                 this.ctx.fillRect(plat.x, plat.y, plat.w, 4);
             }
         });
