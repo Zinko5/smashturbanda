@@ -116,7 +116,7 @@
             </div>
             <div
                 style="position: absolute; bottom: 15px; right: 20px; font-size: 0.85rem; color: #64748b; font-family: 'Outfit', sans-serif; pointer-events: none;">
-                v26.09.02</div>
+                v26.09.03.02</div>
         </div>
 
         <!-- OVERLAY: Character & Stage Selection (CSS) -->
@@ -310,6 +310,19 @@
 
                 <div class="stage-voting-grid"
                     style="display: flex; gap: 20px; justify-content: center; margin: 25px 0; flex-wrap: wrap;">
+                    <!-- Random -->
+                    <div class="stage-vote-card" data-stage="random"
+                        style="width: 170px; background: rgba(255,255,255,0.03); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;">
+                        <div class="stage-vote-preview"
+                            style="height: 100px; background: radial-gradient(#3a2a45, #110c15); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: #888; border: 1.5px dashed rgba(255,255,255,0.1); margin-bottom: 8px;">
+                            <i data-lucide="help-circle" style="width: 36px; height: 36px; color: #a855f7;"></i>
+                        </div>
+                        <div style="font-weight: bold; font-size: 1rem; color: #fff;">Aleatorio</div>
+                        <div style="font-size: 0.7rem; color: #94a3b8; margin: 3px 0;">Mapa al azar</div>
+                        <div class="stage-vote-count" id="vote-count-random"
+                            style="font-weight: 800; color: var(--accent); margin-top: 3px; font-size: 0.85rem;">0 votos
+                        </div>
+                    </div>
                     <!-- Battlefield -->
                     <div class="stage-vote-card" data-stage="battlefield"
                         style="width: 170px; background: rgba(255,255,255,0.03); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;">
@@ -424,19 +437,6 @@
                         <div style="font-weight: bold; font-size: 1rem; color: #fff;">Templo</div>
                         <div style="font-size: 0.7rem; color: #94a3b8; margin: 3px 0;">Altares en las nubes</div>
                         <div class="stage-vote-count" id="vote-count-temple"
-                            style="font-weight: 800; color: var(--accent); margin-top: 3px; font-size: 0.85rem;">0 votos
-                        </div>
-                    </div>
-                    <!-- Random -->
-                    <div class="stage-vote-card" data-stage="random"
-                        style="width: 170px; background: rgba(255,255,255,0.03); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s;">
-                        <div class="stage-vote-preview"
-                            style="height: 100px; background: radial-gradient(#3a2a45, #110c15); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; color: #888; border: 1.5px dashed rgba(255,255,255,0.1); margin-bottom: 8px;">
-                            <i data-lucide="help-circle" style="width: 36px; height: 36px; color: #a855f7;"></i>
-                        </div>
-                        <div style="font-weight: bold; font-size: 1rem; color: #fff;">Aleatorio</div>
-                        <div style="font-size: 0.7rem; color: #94a3b8; margin: 3px 0;">Mapa al azar</div>
-                        <div class="stage-vote-count" id="vote-count-random"
                             style="font-weight: 800; color: var(--accent); margin-top: 3px; font-size: 0.85rem;">0 votos
                         </div>
                     </div>

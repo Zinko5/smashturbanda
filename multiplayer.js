@@ -343,7 +343,10 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
     if (typeof debugConnection === 'function') debugConnection(connection, "Guest-Side");
     isHost = false;
 
+    let connectionOpened = false;
+
     connection.on('open', () => {
+        connectionOpened = true;
         roomCode = code;
         showToast("Conectado con el servidor. Esperando asignación...");
 
@@ -379,6 +382,16 @@ document.getElementById('btn-connect-peer').addEventListener('click', () => {
         connectBtn.textContent = "Conectar a Sala";
         connectBtn.disabled = false;
     });
+
+    // Connection timeout: if not connected in 15s, notify the user
+    setTimeout(() => {
+        if (!connectionOpened && connectBtn.disabled) {
+            showToast("No se pudo conectar. Verifica el código e inténtalo de nuevo.");
+            connectBtn.textContent = "Conectar a Sala";
+            connectBtn.disabled = false;
+            try { connection.close(); } catch (e) { }
+        }
+    }, 15000);
 });
 
 function showToast(msg) {
@@ -1472,7 +1485,7 @@ function updateStageVotes() {
 }
 
 function runRouletteAnimation(winningStage, callback) {
-    const stages = ['battlefield', 'destination', 'moving', 'islands', 'castle', 'pyramid', 'volcano', 'zeppelin', 'temple', 'random'];
+    const stages = ['random', 'battlefield', 'destination', 'moving', 'islands', 'castle', 'pyramid', 'volcano', 'zeppelin', 'temple'];
     let currentIndex = 0;
     let delay = 80;
     let iterations = 0;
@@ -2287,6 +2300,7 @@ if (document.readyState === 'loading') {
 
 // ==========================================
 // WebRTC DEBUG SUITE
+// Uses addEventListener to avoid overwriting PeerJS's internal handlers.
 // ==========================================
 function debugConnection(conn, label) {
     console.log(`%c[DEBUG - ${label}] Connection Object:`, 'color: #38bdf8; font-weight: bold;', conn);
@@ -2312,6 +2326,7 @@ function debugConnection(conn, label) {
         console.error(`%c[DEBUG - ${label}] Connection ERROR event:`, 'color: #ef4444; font-weight: bold;', err);
     });
 
+    // Wait for PeerJS to create the underlying RTCPeerConnection before attaching monitors
     let checkInterval = setInterval(() => {
         if (conn.peerConnection) {
             clearInterval(checkInterval);
@@ -2321,43 +2336,54 @@ function debugConnection(conn, label) {
     setTimeout(() => clearInterval(checkInterval), 15000);
 }
 
+// Tracks whether an ICE restart has already been attempted per RTCPeerConnection
+const iceRestartAttempted = new WeakSet();
+
 function monitorRTCPeerConnection(pc, label) {
     console.log(`%c[DEBUG - ${label}] Monitoring RTCPeerConnection:`, 'color: #a855f7;', pc);
     console.log(`[DEBUG - ${label}] Initial States -> Connection: ${pc.connectionState}, ICE: ${pc.iceConnectionState}, Gathering: ${pc.iceGatheringState}`);
 
-    pc.onconnectionstatechange = () => {
+    // addEventListener preserves PeerJS's own handlers (critical for ICE candidate trickle)
+    pc.addEventListener('connectionstatechange', () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ConnectionState: ${pc.connectionState}`);
-    };
+    });
 
-    pc.oniceconnectionstatechange = () => {
+    pc.addEventListener('iceconnectionstatechange', () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ICEConnectionState: ${pc.iceConnectionState}`);
+
         if (pc.iceConnectionState === 'failed') {
-            console.error(`[DEBUG - ${label}] ICE Negotiation FAILED!`);
-            showToast("Conexión WebRTC fallida (ICE failed). Si usas la misma Wi-Fi, intenta usar datos móviles en el celular.");
-            if (pc.localDescription) {
-                console.log(`[DEBUG - ${label}] Local SDP:`, pc.localDescription.sdp);
-            }
-            if (pc.remoteDescription) {
-                console.log(`[DEBUG - ${label}] Remote SDP:`, pc.remoteDescription.sdp);
+            // Attempt one ICE restart before giving up
+            if (!iceRestartAttempted.has(pc)) {
+                iceRestartAttempted.add(pc);
+                console.warn(`[DEBUG - ${label}] ICE failed, attempting ICE restart...`);
+                showToast("Reconectando...");
+                try {
+                    pc.restartIce();
+                } catch (e) {
+                    console.error(`[DEBUG - ${label}] ICE restart error:`, e);
+                }
+            } else {
+                console.error(`[DEBUG - ${label}] ICE Negotiation FAILED after restart attempt.`);
+                showToast("No se pudo conectar. Verifica tu red e inténtalo de nuevo.");
             }
         }
-    };
+    });
 
-    pc.onicegatheringstatechange = () => {
+    pc.addEventListener('icegatheringstatechange', () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection ICEGatheringState: ${pc.iceGatheringState}`);
-    };
+    });
 
-    pc.onsignalingstatechange = () => {
+    pc.addEventListener('signalingstatechange', () => {
         console.log(`[DEBUG - ${label}] RTCPeerConnection SignalingState: ${pc.signalingState}`);
-    };
+    });
 
-    // Monitor gathered candidates
-    pc.onicecandidate = (event) => {
+    // Monitor gathered candidates (read-only logging, does NOT interfere with PeerJS trickle)
+    pc.addEventListener('icecandidate', (event) => {
         if (event.candidate) {
             console.log(`[DEBUG - ${label}] Local ICE Candidate gathered:`, event.candidate.candidate);
         } else {
             console.log(`[DEBUG - ${label}] ICE Candidate gathering complete.`);
         }
-    };
+    });
 }
 

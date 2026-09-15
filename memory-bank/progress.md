@@ -18,5 +18,6 @@
 - UI enhancements to further polished states.
 
 ## Known Issues / Roadblocks
-- **WebRTC P2P Over Mobile Data (Symmetric NAT / DPI)**: Exhaustive testing has proven that certain mobile networks in LATAM (e.g., Telcel, Movistar, Claro) and enterprise Wi-Fis with "AP Isolation" physically block the P2P connection. This includes aggressive UDP blocking and Deep Packet Inspection (DPI) that severs WebRTC handshakes even when routed through TCP/TLS TURN servers on standard ports (443/3478). This is a hardware/ISP limitation, not a code bug. Players on these restricted networks will experience an infinite "conectando" screen and must switch to standard residential Wi-Fi or use a VPN to play online.
-- No other active bugs reported for the current release (`26.08.01.06`).
+- **WebRTC ICE Handler Bug (FIXED in 26.09.03.02)**: The `monitorRTCPeerConnection` debug function was overwriting PeerJS's internal `onicecandidate` handler via direct property assignment, preventing ICE candidate trickle. This caused most cross-network connections to fail randomly. Fixed by switching to `addEventListener`. Added ICE restart fallback and 15s connection timeout.
+- **WebRTC P2P Over Mobile Data (Symmetric NAT / DPI)**: Some mobile networks with aggressive DPI or enterprise Wi-Fis with AP Isolation may still block WebRTC. Players must use standard residential Wi-Fi or a VPN.
+- No other active bugs reported for the current release.
