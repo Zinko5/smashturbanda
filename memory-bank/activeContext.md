@@ -1,11 +1,12 @@
 # Active Context - Smashturbanda
 
 ## Current Focus
-Development of **Patch 26.09.03** - Critical WebRTC P2P connection fix.
+Lanzamiento Oficial del **Parche 26.09.03** - Corrección Crítica de Conectividad WebRTC P2P y mejoras de calidad de vida.
 
-## Recent Changes (Patch 26.09.03)
-1. **Random Stage First in Order (26.09.03.01)**: Reordered the stage selection grid in [index.html](file:///home/zinko/publico/smashturbanda/index.html) and stage roulette sequence in [multiplayer.js](file:///home/zinko/publico/smashturbanda/multiplayer.js) so the **Aleatorio** option appears as the very first map option.
-2. **Critical WebRTC ICE Handler Fix (26.09.03.02)**: Fixed `monitorRTCPeerConnection` in [multiplayer.js](file:///home/zinko/publico/smashturbanda/multiplayer.js) which was **overwriting PeerJS's internal `onicecandidate` handler** via direct property assignment (`pc.onicecandidate = ...`), preventing ICE candidates from being trickled to remote peers. Replaced all `pc.onXXX =` assignments with `pc.addEventListener(...)` to coexist with PeerJS internals. Also added automatic ICE restart on failure and a 15-second connection timeout with user feedback.
+## Recent Changes (Parche 26.09.03 - Lanzamiento Oficial)
+1. **Critical WebRTC ICE Handler Fix (26.09.03.02)**: Se corrigió `monitorRTCPeerConnection` en [multiplayer.js](file:///home/zinko/publico/smashturbanda/multiplayer.js) que sobreescribía `pc.onicecandidate` de PeerJS mediante asignación directa, evitando el envío de candidatos ICE locales a pares remotos. Se reemplazó por `addEventListener`, asegurando la coexistencia con los callbacks internos de PeerJS. Se agregó reinicio automático de ICE (`restartIce()`) y tiempo límite de conexión de 15s con avisos toast.
+2. **Random Stage First in Order (26.09.03.01)**: Reordenamiento en [index.html](file:///home/zinko/publico/smashturbanda/index.html) y [multiplayer.js](file:///home/zinko/publico/smashturbanda/multiplayer.js) para posicionar el mapa **Aleatorio** como primera opción.
+3. **Afiche Promocional Typst**: Generado [26.09.03.typ](file:///home/zinko/publico/smashturbanda/notas-del-parche/promocion/26.09.03.typ) con agradecimientos a Alex, Victor y Martin, y explicación del bug de red.
 
 ## Previous Release (Patch 26.09.02)
 1. **8-Way Touch D-Pad Controls (26.09.02.05)**: Full 8-way directional grid (52px cells) with smooth `touchmove` thumb sliding, strict 3x3 CSS grid layout, and fixed pure vertical aiming (`up` / `down`) in [game.js](file:///home/zinko/publico/smashturbanda/game.js), [styles.css](file:///home/zinko/publico/smashturbanda/styles.css), [index.html](file:///home/zinko/publico/smashturbanda/index.html), and [input.js](file:///home/zinko/publico/smashturbanda/input.js).
